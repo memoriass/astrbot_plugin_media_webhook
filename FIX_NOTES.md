@@ -127,6 +127,14 @@ await self.context.send_message(unified_msg_origin, message_chain)
   - `show_source_info`：控制是否显示通知来源信息
 - 消息格式优化：`🤖 📺 新单集上线 [Jellyfin]`
 
+### 12. 新增 Ani-RSS 项目兼容性支持
+- 添加了 `is_ani_rss_data()` 方法检测 ani-rss 数据格式
+- 添加了 `parse_ani_rss_webhook_body()` 方法解析 webHookBody 字段
+- 添加了 `convert_ani_rss_to_media_data()` 方法转换数据格式
+- 支持 ani-rss 的配置数据格式，自动转换为标准媒体通知
+- 智能检测 webHookBody 中的图片和文本信息
+- 完全兼容 ani-rss 项目的 webhook 推送格式
+
 ## 测试
 
 修复后的代码已通过基本测试：

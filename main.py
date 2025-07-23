@@ -55,6 +55,7 @@ class MediaWebhookPlugin(Star):
             "radarr": "Radarr",
             "overseerr": "Overseerr",
             "tautulli": "Tautulli",
+            "ani-rss": "Ani-RSS",
             "default": "媒体服务器"
         }
 
@@ -133,14 +134,21 @@ class MediaWebhookPlugin(Star):
             if not body_text:
                 return Response(text="请求体为空", status=400)
 
-            media_data = json.loads(body_text)
+            raw_data = json.loads(body_text)
 
             # 检测通知来源
             headers = dict(request.headers)
-            source = self.detect_notification_source(media_data, headers)
+            source = self.detect_notification_source(raw_data, headers)
+
+            # 处理 ani-rss 数据格式
+            if source == "ani-rss":
+                media_data = self.convert_ani_rss_to_media_data(raw_data)
+                logger.info("检测到 ani-rss 格式数据，已转换为标准格式")
+            else:
+                media_data = raw_data
 
             # 计算请求哈希值
-            request_hash = self.calculate_body_hash(media_data)
+            request_hash = self.calculate_body_hash(raw_data)
 
             # 检查重复请求
             if request_hash and self.is_duplicate_request(request_hash):
@@ -204,8 +212,80 @@ class MediaWebhookPlugin(Star):
             return ""
         return html.unescape(text)
 
+    def is_ani_rss_data(self, data: Dict) -> bool:
+        """检查是否为 ani-rss 数据格式"""
+        # 检查 ani-rss 特有的字段组合
+        ani_rss_fields = [
+            "notificationTemplate", "notificationType", "webHookMethod",
+            "webHookUrl", "webHookBody", "statusList"
+        ]
+
+        # 如果包含多个 ani-rss 特有字段，则认为是 ani-rss 数据
+        found_fields = sum(1 for field in ani_rss_fields if field in data)
+        return found_fields >= 3
+
+    def parse_ani_rss_webhook_body(self, webhook_body: str) -> Dict:
+        """解析 ani-rss 的 webHookBody 字段"""
+        try:
+            # ani-rss 的 webHookBody 可能包含模板变量
+            # 尝试提取其中的结构信息
+            if not webhook_body:
+                return {}
+
+            # 检查是否包含图片和文本信息
+            has_image = "${image}" in webhook_body or "image" in webhook_body.lower()
+            has_text = "${message}" in webhook_body or "text" in webhook_body.lower()
+
+            return {
+                "has_image": has_image,
+                "has_text": has_text,
+                "raw_body": webhook_body
+            }
+        except Exception as e:
+            logger.warning(f"解析 ani-rss webHookBody 失败: {e}")
+            return {}
+
+    def convert_ani_rss_to_media_data(self, data: Dict) -> Dict:
+        """将 ani-rss 数据转换为标准媒体数据格式"""
+        try:
+            # 解析 webHookBody
+            webhook_body = data.get("webHookBody", "")
+            body_info = self.parse_ani_rss_webhook_body(webhook_body)
+
+            # 构建标准格式的媒体数据
+            media_data = {
+                "item_type": "Episode",  # ani-rss 主要处理动画剧集
+                "series_name": "Ani-RSS 通知",
+                "item_name": "动画更新通知",
+                "overview": "来自 Ani-RSS 的动画更新通知",
+                "runtime": "",
+                "year": "",
+                "season_number": "",
+                "episode_number": "",
+            }
+
+            # 如果支持图片，添加默认图片
+            if body_info.get("has_image"):
+                media_data["image_url"] = "https://picsum.photos/300/450"
+
+            return media_data
+
+        except Exception as e:
+            logger.error(f"转换 ani-rss 数据失败: {e}")
+            # 返回基本的媒体数据
+            return {
+                "item_type": "Episode",
+                "series_name": "Ani-RSS 通知",
+                "item_name": "动画更新通知",
+                "overview": "来自 Ani-RSS 的动画更新通知"
+            }
+
     def detect_notification_source(self, data: Dict, headers: Dict) -> str:
         """检测通知来源"""
+        # 检查 ani-rss 特征
+        if self.is_ani_rss_data(data):
+            return "ani-rss"
+
         # 检查User-Agent
         user_agent = headers.get("user-agent", "").lower()
         if "jellyfin" in user_agent:

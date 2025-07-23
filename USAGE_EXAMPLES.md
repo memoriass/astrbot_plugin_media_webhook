@@ -100,6 +100,28 @@
 时长: 24分钟
 ```
 
+### 🎌 QQ 群 + Ani-RSS
+
+**配置**：
+```json
+{
+  "platform_name": "aiocqhttp",
+  "show_platform_prefix": true,
+  "show_source_info": true
+}
+```
+
+**消息效果**：
+```
+🤖 📺 新单集上线 [Ani-RSS]
+
+剧集名称: Ani-RSS 通知
+集名称: 动画更新通知
+
+剧情简介:
+来自 Ani-RSS 的动画更新通知
+```
+
 ## 不同配置下的效果对比
 
 ### 完整信息显示
@@ -142,7 +164,7 @@
 
 ### 家庭媒体中心示例
 
-**环境**：Jellyfin + Sonarr + Radarr + Overseerr
+**环境**：Jellyfin + Sonarr + Radarr + Overseerr + Ani-RSS
 
 **消息流**：
 ```
@@ -151,13 +173,17 @@
 集号: S01E12
 集名称: 里克斯路
 
-🤖 🎬 新电影上线 [Radarr]  
+🤖 🎬 新电影上线 [Radarr]
 电影名称: 壮志凌云：独行侠 (2022)
 
 🤖 📺 新单集上线 [Jellyfin]
 剧集名称: 权力的游戏 (2019)
 集号: S08E06
 集名称: 铁王座
+
+🤖 📺 新单集上线 [Ani-RSS]
+剧集名称: Ani-RSS 通知
+集名称: 动画更新通知
 ```
 
 ### 企业环境示例
