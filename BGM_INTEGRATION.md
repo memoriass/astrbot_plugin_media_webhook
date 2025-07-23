@@ -12,28 +12,28 @@
 - 自动转换为插件需要的数据格式
 
 ### 2. 增强的测试命令
-原来的 `/webhook_test` 命令现在支持多种参数组合：
+优化后的测试命令提供更好的用户体验：
 
 #### 基础用法
 ```
-/webhook_test                    # 使用静态数据，不包含图片
-/webhook_test_simple            # 纯文本测试（保持不变）
+/webhook test                   # 使用 BGM.TV 真实数据，包含图片（默认，推荐）
+/webhook test simple            # 纯文本测试，快速验证
 ```
 
 #### 数据源选择
 ```
-/webhook_test static            # 使用静态测试数据
-/webhook_test bgm               # 使用 BGM.TV 真实数据
-/webhook_test bangumi           # 同 bgm，别名
+/webhook test static            # 使用静态测试数据
+/webhook test bgm               # 使用 BGM.TV 真实数据
+/webhook test bangumi           # 同 bgm，别名
 ```
 
 #### 图片控制
 ```
-/webhook_test static yes        # 静态数据 + 默认图片
-/webhook_test static no         # 静态数据，无图片
-/webhook_test bgm yes           # BGM 数据 + 强制包含图片
-/webhook_test bgm no            # BGM 数据，无图片
-/webhook_test bgm auto          # BGM 数据，自动判断（默认）
+/webhook test static yes        # 静态数据 + 默认图片
+/webhook test static no         # 静态数据，无图片
+/webhook test bgm yes           # BGM 数据 + 强制包含图片
+/webhook test bgm no            # BGM 数据，无图片
+/webhook test bgm auto          # BGM 数据，自动判断
 ```
 
 ## 数据转换示例
@@ -106,10 +106,10 @@
 ## 使用建议
 
 ### 推荐的测试流程
-1. **快速测试** - 使用 `/webhook_test_simple` 验证基本功能
-2. **功能测试** - 使用 `/webhook_test static` 测试消息格式
-3. **真实数据测试** - 使用 `/webhook_test bgm` 测试完整流程
-4. **图片测试** - 使用 `/webhook_test bgm yes` 测试图片功能
+1. **日常测试** - 使用 `/webhook test` 获取真实数据和图片（推荐）
+2. **快速测试** - 使用 `/webhook test simple` 验证基本功能
+3. **静态测试** - 使用 `/webhook test static` 测试消息格式
+4. **无图测试** - 使用 `/webhook test bgm no` 测试纯文本功能
 
 ### 网络环境要求
 - 能够访问 `api.bgm.tv`

@@ -110,6 +110,23 @@ await self.context.send_message(unified_msg_origin, message_chain)
 - 添加了 `force_individual_send` 配置项，可强制使用单独发送
 - 更新了状态命令，显示当前发送策略和平台兼容性
 
+### 10. 优化测试命令用户体验
+- 修改 `/webhook test` 命令默认使用 BGM.TV 真实数据
+- 默认包含图片，提供更真实的测试体验
+- 将所有命令中的下划线改为空格，提升用户体验：
+  - `/webhook_test` → `/webhook test`
+  - `/webhook_status` → `/webhook status`
+  - `/webhook_test_simple` → `/webhook test simple`
+
+### 11. 新增通知来源识别和平台前缀功能
+- 添加了 `detect_notification_source()` 方法智能识别通知来源
+- 支持检测 Jellyfin、Emby、Plex、Sonarr、Radarr、Overseerr、Tautulli 等
+- 添加了 `get_platform_prefix()` 方法为不同平台添加前缀图标
+- 新增配置选项：
+  - `show_platform_prefix`：控制是否显示平台前缀
+  - `show_source_info`：控制是否显示通知来源信息
+- 消息格式优化：`🤖 📺 新单集上线 [Jellyfin]`
+
 ## 测试
 
 修复后的代码已通过基本测试：
@@ -138,15 +155,14 @@ A: 常见的平台名称包括：
 A: 插件提供了多个测试命令：
 
 **基础测试命令：**
-- `/webhook_test_simple` - 纯文本测试，不包含图片，推荐使用
+- `/webhook test simple` - 纯文本测试，不包含图片，快速验证
 
 **增强测试命令：**
-- `/webhook_test` - 使用静态数据，不包含图片（默认）
-- `/webhook_test static` - 明确使用静态测试数据
-- `/webhook_test bgm` - 使用 BGM.TV 真实数据，自动判断是否包含图片
-- `/webhook_test bgm yes` - 使用 BGM.TV 数据并强制包含图片
-- `/webhook_test bgm no` - 使用 BGM.TV 数据但不包含图片
-- `/webhook_test static yes` - 使用静态数据并包含默认图片
+- `/webhook test` - 使用 BGM.TV 真实数据，包含图片（默认，推荐）
+- `/webhook test static` - 使用静态测试数据，包含默认图片
+- `/webhook test bgm` - 明确使用 BGM.TV 真实数据，包含图片
+- `/webhook test bgm no` - 使用 BGM.TV 数据但不包含图片
+- `/webhook test static no` - 使用静态数据但不包含图片
 
 ### Q: 为什么图片测试失败？
 A: 可能的原因：
@@ -164,7 +180,7 @@ A: BGM.TV 数据源的特点：
 
 ### Q: 如何选择合适的测试命令？
 A: 建议选择：
-- **快速测试** - 使用 `/webhook_test_simple`
-- **功能测试** - 使用 `/webhook_test static`
-- **真实数据测试** - 使用 `/webhook_test bgm`
-- **完整测试** - 使用 `/webhook_test bgm yes`
+- **快速测试** - 使用 `/webhook test simple`
+- **日常测试** - 使用 `/webhook test`（默认 BGM.TV 真实数据）
+- **静态数据测试** - 使用 `/webhook test static`
+- **无图片测试** - 使用 `/webhook test bgm no`

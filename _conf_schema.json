@@ -46,5 +46,17 @@
     "type": "bool",
     "hint": "是否强制使用单独发送模式，即使达到批量发送条件",
     "default": false
+  },
+  "show_platform_prefix": {
+    "description": "显示平台前缀",
+    "type": "bool",
+    "hint": "是否在消息中显示发送平台的前缀图标",
+    "default": true
+  },
+  "show_source_info": {
+    "description": "显示通知来源",
+    "type": "bool",
+    "hint": "是否在消息中显示通知来源信息（如Jellyfin、Emby等）",
+    "default": true
   }
 }

@@ -46,6 +46,31 @@ class MediaWebhookPlugin(Star):
         }
         self.type_emoji_map = {"Season": "🎬", "Episode": "📺", "Default": "🌟"}
 
+        # 通知来源映射
+        self.source_map = {
+            "jellyfin": "Jellyfin",
+            "emby": "Emby",
+            "plex": "Plex",
+            "sonarr": "Sonarr",
+            "radarr": "Radarr",
+            "overseerr": "Overseerr",
+            "tautulli": "Tautulli",
+            "default": "媒体服务器"
+        }
+
+        # 平台前缀映射
+        self.platform_prefix_map = {
+            "aiocqhttp": "🤖",
+            "telegram": "✈️",
+            "gewechat": "💬",
+            "qqofficial": "🤖",
+            "lark": "🚀",
+            "dingtalk": "📱",
+            "discord": "🎮",
+            "wecom": "💼",
+            "default": "📢"
+        }
+
         # 验证配置
         self.validate_config()
 
@@ -110,6 +135,10 @@ class MediaWebhookPlugin(Star):
 
             media_data = json.loads(body_text)
 
+            # 检测通知来源
+            headers = dict(request.headers)
+            source = self.detect_notification_source(media_data, headers)
+
             # 计算请求哈希值
             request_hash = self.calculate_body_hash(media_data)
 
@@ -126,15 +155,17 @@ class MediaWebhookPlugin(Star):
             # 生成消息内容
             message_payload = {
                 "image_url": media_data.get("image_url", ""),
-                "message_text": self.generate_message_text(media_data),
+                "message_text": self.generate_message_text(media_data, source),
                 "timestamp": time.time(),
+                "source": source,
             }
 
             # 添加到消息队列
             self.message_queue.append(message_payload)
 
+            source_name = self.source_map.get(source, source)
             logger.info(
-                f"新 {media_data.get('item_type', 'Unknown')} 通知已加入队列。[hash: {request_hash}]"
+                f"新 {media_data.get('item_type', 'Unknown')} 通知已加入队列。[来源: {source_name}] [hash: {request_hash}]"
             )
             return Response(text="消息已加入队列", status=200)
 
@@ -173,6 +204,48 @@ class MediaWebhookPlugin(Star):
             return ""
         return html.unescape(text)
 
+    def detect_notification_source(self, data: Dict, headers: Dict) -> str:
+        """检测通知来源"""
+        # 检查User-Agent
+        user_agent = headers.get("user-agent", "").lower()
+        if "jellyfin" in user_agent:
+            return "jellyfin"
+        elif "emby" in user_agent:
+            return "emby"
+        elif "plex" in user_agent:
+            return "plex"
+
+        # 检查数据字段特征
+        if "jellyfin" in str(data).lower():
+            return "jellyfin"
+        elif "emby" in str(data).lower():
+            return "emby"
+        elif "plex" in str(data).lower():
+            return "plex"
+        elif "sonarr" in str(data).lower():
+            return "sonarr"
+        elif "radarr" in str(data).lower():
+            return "radarr"
+        elif "overseerr" in str(data).lower():
+            return "overseerr"
+        elif "tautulli" in str(data).lower():
+            return "tautulli"
+
+        # 检查特定字段
+        if data.get("server_name") or data.get("server_version"):
+            return "jellyfin"  # 常见于Jellyfin
+        elif data.get("application") == "Emby":
+            return "emby"
+        elif data.get("product") == "Plex":
+            return "plex"
+
+        return "default"
+
+    def get_platform_prefix(self) -> str:
+        """获取平台前缀"""
+        platform_name = self.config.get("platform_name", "aiocqhttp")
+        return self.platform_prefix_map.get(platform_name.lower(), self.platform_prefix_map["default"])
+
     def generate_main_section(self, data: Dict) -> str:
         """生成消息主要部分"""
         sections = []
@@ -207,13 +280,34 @@ class MediaWebhookPlugin(Star):
 
         return "\n".join(sections)
 
-    def generate_message_text(self, data: Dict) -> str:
+    def generate_message_text(self, data: Dict, source: str = "default") -> str:
         """生成消息文本"""
         item_type = data.get("item_type", "")
         cn_type = self.media_type_map.get(item_type, item_type)
         emoji = self.type_emoji_map.get(item_type, self.type_emoji_map["Default"])
 
-        message_parts = [f"{emoji} 新{cn_type}上线", self.generate_main_section(data)]
+        # 检查配置选项
+        show_platform_prefix = self.config.get("show_platform_prefix", True)
+        show_source_info = self.config.get("show_source_info", True)
+
+        # 构建标题
+        title_parts = []
+
+        # 添加平台前缀
+        if show_platform_prefix:
+            platform_prefix = self.get_platform_prefix()
+            title_parts.append(platform_prefix)
+
+        # 添加基本标题
+        title_parts.append(f"{emoji} 新{cn_type}上线")
+
+        # 添加来源信息
+        if show_source_info and source != "default":
+            source_name = self.source_map.get(source.lower(), self.source_map["default"])
+            title_parts.append(f"[{source_name}]")
+
+        title = " ".join(title_parts)
+        message_parts = [title, self.generate_main_section(data)]
 
         overview = data.get("overview", "")
         if overview:
@@ -450,7 +544,7 @@ class MediaWebhookPlugin(Star):
 
         logger.info(f"成功逐个发送 {len(messages)} 条消息")
 
-    @filter.command("webhook_status")
+    @filter.command("webhook status")
     async def webhook_status(self, event: AstrMessageEvent):
         """查看Webhook状态"""
         port = self.config.get("webhook_port", 60071)
@@ -484,12 +578,12 @@ class MediaWebhookPlugin(Star):
 
         yield event.plain_result(status_text)
 
-    @filter.command("webhook_test")
-    async def webhook_test(self, event: AstrMessageEvent, data_source: str = "static", include_image: str = "auto"):
+    @filter.command("webhook test")
+    async def webhook_test(self, event: AstrMessageEvent, data_source: str = "bgm", include_image: str = "auto"):
         """测试Webhook功能
 
         Args:
-            data_source: 数据源 (static/bgm)，默认为 static
+            data_source: 数据源 (static/bgm)，默认为 bgm
             include_image: 是否包含图片测试 (yes/no/auto)，默认为 auto
         """
         # 根据数据源获取测试数据
@@ -507,8 +601,8 @@ class MediaWebhookPlugin(Star):
 
         # 处理图片设置
         if include_image.lower() == "auto":
-            # 如果是 BGM 数据且有图片URL，则包含图片
-            include_image = "yes" if (data_source.lower() in ["bgm", "bangumi"] and test_data.get("image_url")) else "no"
+            # 默认包含图片，如果是 BGM 数据且有图片URL，则包含图片；静态数据也包含默认图片
+            include_image = "yes"
 
         # 如果明确不要图片，移除图片URL
         if include_image.lower() in ["no", "n", "false", "0"]:
@@ -517,7 +611,9 @@ class MediaWebhookPlugin(Star):
             # 如果要求图片但没有图片URL，使用默认图片
             test_data["image_url"] = "https://picsum.photos/300/450"
 
-        message_text = self.generate_message_text(test_data)
+        # 使用测试来源
+        test_source = "jellyfin" if data_source.lower() in ["bgm", "bangumi"] else "default"
+        message_text = self.generate_message_text(test_data, test_source)
 
         content = []
         image_url = test_data.get("image_url")
@@ -544,7 +640,7 @@ class MediaWebhookPlugin(Star):
             "runtime": "45分钟",
         }
 
-    @filter.command("webhook_test_simple")
+    @filter.command("webhook test simple")
     async def webhook_test_simple(self, event: AstrMessageEvent):
         """简单测试Webhook功能（不包含图片）"""
         test_data = {
@@ -558,7 +654,7 @@ class MediaWebhookPlugin(Star):
             "runtime": "45分钟",
         }
 
-        message_text = self.generate_message_text(test_data)
+        message_text = self.generate_message_text(test_data, "default")
         yield event.plain_result(message_text)
 
     async def terminate(self):
