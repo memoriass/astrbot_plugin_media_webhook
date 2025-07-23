@@ -2,10 +2,12 @@ import asyncio
 import hashlib
 import html
 import json
+import random
 import time
 from typing import Dict, List, Optional
 
 import astrbot.api.message_components as Comp
+import aiohttp
 from aiohttp import web
 from aiohttp.web import Request, Response
 from astrbot.api import AstrBotConfig, logger
@@ -224,6 +226,130 @@ class MediaWebhookPlugin(Star):
 
         return "\n\n".join(message_parts)
 
+    def supports_forward_messages(self, platform_name: str) -> bool:
+        """检查平台是否支持合并转发功能"""
+        # 支持合并转发的平台列表
+        forward_supported_platforms = {
+            "aiocqhttp",  # OneBot V11 标准，支持 Node 组件
+            # 其他支持合并转发的平台可以在这里添加
+        }
+
+        return platform_name.lower() in forward_supported_platforms
+
+    async def fetch_bgm_data(self) -> Optional[Dict]:
+        """从 bgm.tv 获取随机剧集数据"""
+        try:
+            # BGM.TV API 端点
+            # 获取热门动画列表
+            api_url = "https://api.bgm.tv/search/subject/动画"
+
+            headers = {
+                'User-Agent': 'AstrBot-MediaWebhook/1.0.0 (https://github.com/Soulter/AstrBot)',
+                'Accept': 'application/json'
+            }
+
+            async with aiohttp.ClientSession() as session:
+                # 获取搜索结果
+                async with session.get(api_url, headers=headers, timeout=10) as resp:
+                    if resp.status != 200:
+                        logger.warning(f"BGM.TV API 请求失败: {resp.status}")
+                        return None
+
+                    data = await resp.json()
+
+                    if not data.get('list'):
+                        logger.warning("BGM.TV API 返回空列表")
+                        return None
+
+                    # 随机选择一个条目
+                    subjects = data['list']
+                    if not subjects:
+                        return None
+
+                    subject = random.choice(subjects)
+
+                    # 获取详细信息
+                    subject_id = subject.get('id')
+                    if subject_id:
+                        detail_url = f"https://api.bgm.tv/v0/subjects/{subject_id}"
+                        async with session.get(detail_url, headers=headers, timeout=10) as detail_resp:
+                            if detail_resp.status == 200:
+                                detail_data = await detail_resp.json()
+
+                                # 转换为插件需要的格式
+                                return self.convert_bgm_to_test_data(detail_data)
+
+                    # 如果获取详细信息失败，使用基本信息
+                    return self.convert_bgm_to_test_data(subject)
+
+        except asyncio.TimeoutError:
+            logger.warning("BGM.TV API 请求超时")
+            return None
+        except Exception as e:
+            logger.warning(f"获取 BGM.TV 数据失败: {e}")
+            return None
+
+    def convert_bgm_to_test_data(self, bgm_data: Dict) -> Dict:
+        """将 BGM.TV 数据转换为测试数据格式"""
+        try:
+            # 提取基本信息
+            name = bgm_data.get('name', '未知作品')
+            name_cn = bgm_data.get('name_cn', name)
+
+            # 使用中文名称，如果没有则使用原名
+            series_name = name_cn if name_cn else name
+
+            # 提取年份
+            year = ""
+            air_date = bgm_data.get('air_date', '')
+            if air_date:
+                try:
+                    year = air_date.split('-')[0]
+                except:
+                    pass
+
+            # 提取简介
+            summary = bgm_data.get('summary', '')
+            if len(summary) > 200:
+                summary = summary[:200] + "..."
+
+            # 提取图片
+            image_url = ""
+            images = bgm_data.get('images', {})
+            if images:
+                # 优先使用大图
+                image_url = images.get('large', images.get('medium', images.get('small', '')))
+
+            # 随机生成集数信息
+            season_number = random.randint(1, 3)
+            episode_number = random.randint(1, 24)
+
+            return {
+                "item_type": "Episode",
+                "series_name": series_name,
+                "year": year,
+                "item_name": f"第{episode_number}话",
+                "season_number": season_number,
+                "episode_number": episode_number,
+                "overview": summary or "暂无剧情简介",
+                "runtime": f"{random.randint(20, 30)}分钟",
+                "image_url": image_url
+            }
+
+        except Exception as e:
+            logger.warning(f"转换 BGM.TV 数据失败: {e}")
+            # 返回默认数据
+            return {
+                "item_type": "Episode",
+                "series_name": "数据转换失败",
+                "year": "2024",
+                "item_name": "测试集名称",
+                "season_number": 1,
+                "episode_number": 1,
+                "overview": "无法获取剧情简介",
+                "runtime": "24分钟",
+            }
+
     async def start_batch_processor(self):
         """启动批量处理任务"""
         while True:
@@ -255,18 +381,33 @@ class MediaWebhookPlugin(Star):
 
         try:
             batch_min_size = self.config.get("batch_min_size", 3)
+            platform_name = self.config.get("platform_name", "aiocqhttp")
+            force_individual = self.config.get("force_individual_send", False)
 
-            if len(messages) >= batch_min_size:
+            # 智能发送逻辑
+            if len(messages) < batch_min_size:
+                # 消息数量不足，直接单独发送
+                logger.info(f"消息数量 {len(messages)} 低于批量发送阈值 {batch_min_size}，使用单独发送")
+                await self.send_individual_messages(group_id, messages)
+            elif force_individual:
+                # 强制单独发送
+                logger.info(f"配置强制单独发送，将 {len(messages)} 条消息逐个发送")
+                await self.send_individual_messages(group_id, messages)
+            elif self.supports_forward_messages(platform_name):
+                # 平台支持合并转发，使用合并发送
+                logger.info(f"平台 {platform_name} 支持合并转发，将 {len(messages)} 条消息合并发送")
                 await self.send_batch_messages(group_id, messages)
             else:
+                # 平台不支持合并转发，回退到单独发送
+                logger.info(f"平台 {platform_name} 不支持合并转发，将 {len(messages)} 条消息逐个发送")
                 await self.send_individual_messages(group_id, messages)
 
         except Exception as e:
             logger.error(f"发送消息时出错: {e}")
 
     async def send_batch_messages(self, group_id: str, messages: List[Dict]):
-        """发送批量合并转发消息"""
-        logger.info(f"消息数量达到 {len(messages)} 条，准备合并发送")
+        """发送批量合并转发消息（仅支持 aiocqhttp 等平台）"""
+        logger.info(f"使用合并转发发送 {len(messages)} 条消息")
 
         # 构建合并转发节点
         forward_nodes = []
@@ -288,11 +429,11 @@ class MediaWebhookPlugin(Star):
         message_chain = MessageChain(chain=forward_nodes)
         await self.context.send_message(unified_msg_origin, message_chain)
 
-        logger.info(f"成功发送 {len(messages)} 条合并消息")
+        logger.info(f"成功发送 {len(messages)} 条合并转发消息")
 
     async def send_individual_messages(self, group_id: str, messages: List[Dict]):
-        """发送单独消息"""
-        logger.info(f"消息数量不足批量发送条件，准备单独发送 {len(messages)} 条消息")
+        """发送单独消息（适用于所有平台）"""
+        logger.info(f"逐个发送 {len(messages)} 条消息")
 
         platform_name = self.config.get("platform_name", "aiocqhttp")
         unified_msg_origin = f"{platform_name}:GroupMessage:{group_id}"
@@ -307,7 +448,7 @@ class MediaWebhookPlugin(Star):
             message_chain = MessageChain(chain=content)
             await self.context.send_message(unified_msg_origin, message_chain)
 
-        logger.info(f"成功发送 {len(messages)} 条单独消息")
+        logger.info(f"成功逐个发送 {len(messages)} 条消息")
 
     @filter.command("webhook_status")
     async def webhook_status(self, event: AstrMessageEvent):
@@ -317,8 +458,25 @@ class MediaWebhookPlugin(Star):
         queue_size = len(self.message_queue)
         cache_size = len(self.request_cache)
 
+        platform_name = self.config.get("platform_name", "aiocqhttp")
+        supports_forward = self.supports_forward_messages(platform_name)
+        force_individual = self.config.get("force_individual_send", False)
+
+        # 确定发送策略
+        if force_individual:
+            send_strategy = "强制单独发送"
+        elif supports_forward:
+            send_strategy = f"智能发送（支持合并转发）"
+        else:
+            send_strategy = f"单独发送（平台不支持合并转发）"
+
         status_text = f"""📊 Media Webhook 状态
 🌐 服务地址: http://localhost:{port}{path}
+🎯 目标群组: {self.config.get('group_id', '未配置')}
+🔗 消息平台: {platform_name}
+📤 发送策略: {send_strategy}
+🔀 合并转发支持: {'✅' if supports_forward else '❌'}
+
 📋 队列消息数: {queue_size}
 🗂️ 缓存请求数: {cache_size}
 ⚙️ 批量发送阈值: {self.config.get('batch_min_size', 3)}
@@ -327,8 +485,68 @@ class MediaWebhookPlugin(Star):
         yield event.plain_result(status_text)
 
     @filter.command("webhook_test")
-    async def webhook_test(self, event: AstrMessageEvent):
-        """测试Webhook功能"""
+    async def webhook_test(self, event: AstrMessageEvent, data_source: str = "static", include_image: str = "auto"):
+        """测试Webhook功能
+
+        Args:
+            data_source: 数据源 (static/bgm)，默认为 static
+            include_image: 是否包含图片测试 (yes/no/auto)，默认为 auto
+        """
+        # 根据数据源获取测试数据
+        if data_source.lower() in ["bgm", "bangumi"]:
+            yield event.plain_result("🔄 正在从 BGM.TV 获取随机剧集数据...")
+            test_data = await self.fetch_bgm_data()
+
+            if not test_data:
+                yield event.plain_result("❌ 无法从 BGM.TV 获取数据，使用默认测试数据")
+                test_data = self.get_default_test_data()
+            else:
+                yield event.plain_result("✅ 成功获取 BGM.TV 数据")
+        else:
+            test_data = self.get_default_test_data()
+
+        # 处理图片设置
+        if include_image.lower() == "auto":
+            # 如果是 BGM 数据且有图片URL，则包含图片
+            include_image = "yes" if (data_source.lower() in ["bgm", "bangumi"] and test_data.get("image_url")) else "no"
+
+        # 如果明确不要图片，移除图片URL
+        if include_image.lower() in ["no", "n", "false", "0"]:
+            test_data.pop("image_url", None)
+        elif include_image.lower() in ["yes", "y", "true", "1"] and not test_data.get("image_url"):
+            # 如果要求图片但没有图片URL，使用默认图片
+            test_data["image_url"] = "https://picsum.photos/300/450"
+
+        message_text = self.generate_message_text(test_data)
+
+        content = []
+        image_url = test_data.get("image_url")
+        if image_url:
+            try:
+                content.append(Comp.Image.fromURL(str(image_url)))
+            except Exception as e:
+                logger.warning(f"无法加载测试图片: {e}")
+                content.append(Comp.Plain(f"[图片加载失败: {image_url}]\n\n"))
+        content.append(Comp.Plain(message_text))
+
+        yield event.chain_result(content)
+
+    def get_default_test_data(self) -> Dict:
+        """获取默认测试数据"""
+        return {
+            "item_type": "Episode",
+            "series_name": "测试剧集",
+            "year": "2024",
+            "item_name": "测试集名称",
+            "season_number": 1,
+            "episode_number": 1,
+            "overview": "这是一个测试剧情简介",
+            "runtime": "45分钟",
+        }
+
+    @filter.command("webhook_test_simple")
+    async def webhook_test_simple(self, event: AstrMessageEvent):
+        """简单测试Webhook功能（不包含图片）"""
         test_data = {
             "item_type": "Episode",
             "series_name": "测试剧集",
@@ -338,17 +556,10 @@ class MediaWebhookPlugin(Star):
             "episode_number": 1,
             "overview": "这是一个测试剧情简介",
             "runtime": "45分钟",
-            "image_url": "https://via.placeholder.com/300x450/0066cc/ffffff?text=Test+Media",
         }
 
         message_text = self.generate_message_text(test_data)
-
-        content = []
-        if test_data.get("image_url"):
-            content.append(Comp.Image.fromURL(test_data["image_url"]))
-        content.append(Comp.Plain(message_text))
-
-        yield event.chain_result(content)
+        yield event.plain_result(message_text)
 
     async def terminate(self):
         """插件卸载时的清理工作"""

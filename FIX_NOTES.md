@@ -62,6 +62,12 @@ await self.context.send_message(unified_msg_origin, message_chain)
     "type": "string",
     "hint": "发送消息的平台名称，如 aiocqhttp、telegram 等",
     "default": "aiocqhttp"
+  },
+  "force_individual_send": {
+    "description": "强制单独发送",
+    "type": "bool",
+    "hint": "是否强制使用单独发送模式，即使达到批量发送条件",
+    "default": false
   }
 }
 ```
@@ -82,6 +88,27 @@ await self.context.send_message(unified_msg_origin, message_chain)
 ### 6. 添加了调试日志和群组ID清理
 - 添加了调试日志来跟踪消息发送过程
 - 清理群组ID中的冒号字符，避免解析错误
+
+### 7. 修复了测试命令的网络问题
+- 修复了 `/webhook_test` 命令中图片URL无法访问的问题
+- 将测试图片源从 `via.placeholder.com` 改为 `picsum.photos`
+- 添加了图片加载失败的错误处理
+
+### 8. 新增 BGM.TV 数据源功能
+- 集成了 BGM.TV API，可以获取真实的动画剧集数据
+- 添加了 `fetch_bgm_data()` 方法从 BGM.TV 随机获取剧集信息
+- 添加了 `convert_bgm_to_test_data()` 方法转换数据格式
+- 支持获取剧集名称、年份、简介、图片等完整信息
+- 增强了 `/webhook_test` 命令，支持多种数据源和参数
+
+### 9. 优化发送逻辑，支持平台兼容性
+- 添加了 `supports_forward_messages()` 方法检查平台合并转发支持
+- 实现智能发送策略：
+  - 消息数量 < `batch_min_size`：直接单独发送
+  - 消息数量 ≥ `batch_min_size` 且平台支持合并转发：使用合并转发
+  - 消息数量 ≥ `batch_min_size` 但平台不支持合并转发：回退到单独发送
+- 添加了 `force_individual_send` 配置项，可强制使用单独发送
+- 更新了状态命令，显示当前发送策略和平台兼容性
 
 ## 测试
 
@@ -106,3 +133,38 @@ A: 常见的平台名称包括：
 - `discord` - Discord
 - `lark` - 飞书
 - `dingtalk` - 钉钉
+
+### Q: 测试命令使用方法？
+A: 插件提供了多个测试命令：
+
+**基础测试命令：**
+- `/webhook_test_simple` - 纯文本测试，不包含图片，推荐使用
+
+**增强测试命令：**
+- `/webhook_test` - 使用静态数据，不包含图片（默认）
+- `/webhook_test static` - 明确使用静态测试数据
+- `/webhook_test bgm` - 使用 BGM.TV 真实数据，自动判断是否包含图片
+- `/webhook_test bgm yes` - 使用 BGM.TV 数据并强制包含图片
+- `/webhook_test bgm no` - 使用 BGM.TV 数据但不包含图片
+- `/webhook_test static yes` - 使用静态数据并包含默认图片
+
+### Q: 为什么图片测试失败？
+A: 可能的原因：
+1. 网络连接问题，无法访问图片URL
+2. 防火墙或代理设置阻止了图片下载
+3. 建议使用 `/webhook_test_simple` 进行纯文本测试
+
+### Q: BGM.TV 数据源有什么特点？
+A: BGM.TV 数据源的特点：
+1. **真实数据** - 从 BGM.TV 获取真实的动画剧集信息
+2. **随机性** - 每次调用都会随机选择不同的作品
+3. **完整信息** - 包含剧集名称、年份、简介、图片等
+4. **自动图片** - 如果作品有封面图，会自动包含
+5. **网络依赖** - 需要能够访问 BGM.TV API
+
+### Q: 如何选择合适的测试命令？
+A: 建议选择：
+- **快速测试** - 使用 `/webhook_test_simple`
+- **功能测试** - 使用 `/webhook_test static`
+- **真实数据测试** - 使用 `/webhook_test bgm`
+- **完整测试** - 使用 `/webhook_test bgm yes`

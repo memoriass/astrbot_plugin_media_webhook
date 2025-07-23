@@ -40,5 +40,11 @@
     "type": "string",
     "hint": "发送消息的平台名称，如 aiocqhttp、telegram 等",
     "default": "aiocqhttp"
+  },
+  "force_individual_send": {
+    "description": "强制单独发送",
+    "type": "bool",
+    "hint": "是否强制使用单独发送模式，即使达到批量发送条件",
+    "default": false
   }
 }
