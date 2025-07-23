@@ -134,19 +134,53 @@ class MediaWebhookPlugin(Star):
             if not body_text:
                 return Response(text="请求体为空", status=400)
 
-            # 尝试解析 JSON，如果失败则检查是否为 Ani-RSS 文本模板
+            # 记录详细的调试信息
+            headers = dict(request.headers)
+            logger.info(f"收到 Webhook 请求:")
+            logger.info(f"  User-Agent: {headers.get('user-agent', 'N/A')}")
+            logger.info(f"  Content-Type: {headers.get('content-type', 'N/A')}")
+            logger.info(f"  Content-Length: {headers.get('content-length', 'N/A')}")
+            logger.info(f"  请求体长度: {len(body_text)} 字符")
+            logger.info(f"  请求体前100字符: {body_text[:100]}")
+
+            # 尝试解析 JSON，如果失败则尝试修复或检查其他格式
             try:
                 raw_data = json.loads(body_text)
                 is_text_template = False
-            except json.JSONDecodeError:
-                # 检查是否为 Ani-RSS 文本模板
-                if self.is_ani_rss_text_template(body_text):
-                    raw_data = {"text_template": body_text}
-                    is_text_template = True
-                    logger.info("检测到 ani-rss 文本模板格式")
-                else:
-                    logger.error("Webhook 请求体解析失败: 无效的JSON格式且不是已知的文本模板")
-                    return Response(text="无效的数据格式", status=400)
+                logger.info("成功解析为 JSON 格式")
+            except json.JSONDecodeError as e:
+                logger.info(f"JSON 解析失败: {e}")
+
+                # 尝试修复不完整的 ani-rss JSON
+                fixed_json = self.try_fix_ani_rss_json(body_text)
+                if fixed_json:
+                    try:
+                        raw_data = json.loads(fixed_json)
+                        is_text_template = False
+                        logger.info("成功修复并解析 ani-rss 不完整 JSON")
+                    except json.JSONDecodeError:
+                        fixed_json = None
+
+                if not fixed_json:
+                    # 检查是否为 Ani-RSS 文本模板
+                    if self.is_ani_rss_text_template(body_text):
+                        raw_data = {"text_template": body_text}
+                        is_text_template = True
+                        logger.info("检测到 ani-rss 文本模板格式")
+                    else:
+                        logger.error("Webhook 请求体解析失败: 无效的JSON格式且不是已知的文本模板")
+                        logger.error(f"完整请求体内容:\n{body_text}")
+                        # 保存失败的请求到文件以供分析
+                        import datetime
+                        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                        filename = f"failed_webhook_{timestamp}.txt"
+                        with open(filename, 'w', encoding='utf-8') as f:
+                            f.write(f"时间: {timestamp}\n")
+                            f.write(f"User-Agent: {headers.get('user-agent', 'N/A')}\n")
+                            f.write(f"Content-Type: {headers.get('content-type', 'N/A')}\n")
+                            f.write(f"请求体:\n{body_text}")
+                        logger.error(f"失败的请求已保存到: {filename}")
+                        return Response(text="无效的数据格式", status=400)
 
             # 检测通知来源
             headers = dict(request.headers)
@@ -233,6 +267,107 @@ class MediaWebhookPlugin(Star):
         if not text:
             return ""
         return html.unescape(text)
+
+    def try_fix_ani_rss_json(self, body_text: str) -> str:
+        """尝试修复不完整的 ani-rss JSON"""
+        try:
+            # 检查是否包含 ani-rss 特征
+            if "meassage" not in body_text:
+                return ""
+
+            # 尝试修复常见的不完整 JSON 问题
+            fixed_text = body_text.strip()
+
+            # 计算需要的闭合括号数量
+            open_braces = fixed_text.count('{')
+            close_braces = fixed_text.count('}')
+            open_brackets = fixed_text.count('[')
+            close_brackets = fixed_text.count(']')
+
+            # 记录修复前的状态
+            logger.info(f"JSON 修复分析: 开放括号 {{{open_braces}, [{open_brackets}, 闭合括号 }}{close_braces}, ]{close_brackets}")
+
+            # 添加缺失的闭合符号（先添加中括号，再添加大括号）
+            brackets_needed = open_brackets - close_brackets
+            braces_needed = open_braces - close_braces
+
+            if brackets_needed > 0:
+                fixed_text += ']' * brackets_needed
+
+            if braces_needed > 0:
+                fixed_text += '}' * braces_needed
+
+            # 验证修复后的 JSON
+            try:
+                parsed_data = json.loads(fixed_text)
+                logger.info(f"成功修复 JSON，添加了 {braces_needed} 个 '}}' 和 {brackets_needed} 个 ']]'")
+
+                # 验证数据结构
+                if "meassage" in parsed_data:
+                    messages = parsed_data["meassage"]
+                    logger.info(f"修复后的 JSON 包含 {len(messages)} 条消息")
+
+                return fixed_text
+            except json.JSONDecodeError as e:
+                logger.warning(f"修复后的 JSON 仍然无效: {e}")
+
+                # 尝试更激进的修复方法
+                return self.try_aggressive_json_fix(body_text)
+
+        except Exception as e:
+            logger.warning(f"修复 JSON 时出错: {e}")
+            return ""
+
+    def try_aggressive_json_fix(self, body_text: str) -> str:
+        """尝试更激进的 JSON 修复方法"""
+        try:
+            logger.info("尝试激进的 JSON 修复方法")
+
+            # 移除多余的空白字符
+            fixed_text = ' '.join(body_text.split())
+
+            # 确保 JSON 以 { 开始
+            if not fixed_text.startswith('{'):
+                fixed_text = '{' + fixed_text
+
+            # 查找最后一个有意义的字符
+            last_meaningful_char = ''
+            for char in reversed(fixed_text):
+                if char not in ' \t\n\r':
+                    last_meaningful_char = char
+                    break
+
+            # 根据最后一个字符决定如何闭合
+            if last_meaningful_char == '"':
+                # 如果以引号结束，可能需要闭合对象和数组
+                fixed_text += '}]}'
+            elif last_meaningful_char == '}':
+                # 如果以大括号结束，可能只需要闭合数组
+                fixed_text += ']}'
+            else:
+                # 其他情况，尝试标准修复
+                open_braces = fixed_text.count('{')
+                close_braces = fixed_text.count('}')
+                open_brackets = fixed_text.count('[')
+                close_brackets = fixed_text.count(']')
+
+                if open_brackets > close_brackets:
+                    fixed_text += ']' * (open_brackets - close_brackets)
+                if open_braces > close_braces:
+                    fixed_text += '}' * (open_braces - close_braces)
+
+            # 验证修复结果
+            try:
+                json.loads(fixed_text)
+                logger.info("激进修复成功")
+                return fixed_text
+            except json.JSONDecodeError as e:
+                logger.warning(f"激进修复也失败: {e}")
+                return ""
+
+        except Exception as e:
+            logger.warning(f"激进修复时出错: {e}")
+            return ""
 
     def is_ani_rss_data(self, data: Dict) -> bool:
         """检查是否为 ani-rss 数据格式"""
@@ -868,40 +1003,25 @@ class MediaWebhookPlugin(Star):
         yield event.plain_result(status_text)
 
     @filter.command("webhook test")
-    async def webhook_test(self, event: AstrMessageEvent, data_source: str = "bgm", include_image: str = "auto"):
+    async def webhook_test(self, event: AstrMessageEvent, source: str = "bgm"):
         """测试Webhook功能
 
         Args:
-            data_source: 数据源 (static/bgm)，默认为 bgm
-            include_image: 是否包含图片测试 (yes/no/auto)，默认为 auto
+            source: 数据源 (bgm/static)，默认为 bgm
         """
-        # 根据数据源获取测试数据
-        if data_source.lower() in ["bgm", "bangumi"]:
-            yield event.plain_result("🔄 正在从 BGM.TV 获取随机剧集数据...")
+        if source.lower() in ["bgm", "bangumi"]:
+            yield event.plain_result("🔄 获取 BGM.TV 数据...")
             test_data = await self.fetch_bgm_data()
-
             if not test_data:
-                yield event.plain_result("❌ 无法从 BGM.TV 获取数据，使用默认测试数据")
                 test_data = self.get_default_test_data()
+                yield event.plain_result("❌ BGM.TV 获取失败，使用静态数据")
             else:
-                yield event.plain_result("✅ 成功获取 BGM.TV 数据")
+                yield event.plain_result("✅ BGM.TV 数据获取成功")
         else:
             test_data = self.get_default_test_data()
 
-        # 处理图片设置
-        if include_image.lower() == "auto":
-            # 默认包含图片，如果是 BGM 数据且有图片URL，则包含图片；静态数据也包含默认图片
-            include_image = "yes"
-
-        # 如果明确不要图片，移除图片URL
-        if include_image.lower() in ["no", "n", "false", "0"]:
-            test_data.pop("image_url", None)
-        elif include_image.lower() in ["yes", "y", "true", "1"] and not test_data.get("image_url"):
-            # 如果要求图片但没有图片URL，使用默认图片
-            test_data["image_url"] = "https://picsum.photos/300/450"
-
-        # 使用测试来源
-        test_source = "jellyfin" if data_source.lower() in ["bgm", "bangumi"] else "default"
+        # 生成消息
+        test_source = "jellyfin" if source.lower() in ["bgm", "bangumi"] else "default"
         message_text = self.generate_message_text(test_data, test_source)
 
         content = []
@@ -910,8 +1030,8 @@ class MediaWebhookPlugin(Star):
             try:
                 content.append(Comp.Image.fromURL(str(image_url)))
             except Exception as e:
-                logger.warning(f"无法加载测试图片: {e}")
-                content.append(Comp.Plain(f"[图片加载失败: {image_url}]\n\n"))
+                logger.warning(f"图片加载失败: {e}")
+                content.append(Comp.Plain(f"[图片加载失败]\n\n"))
         content.append(Comp.Plain(message_text))
 
         yield event.chain_result(content)

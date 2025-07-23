@@ -1,174 +1,111 @@
-# Media Webhook 插件
+# 媒体通知 Webhook 插件
 
-基于原始 `webhook.js` 开发的 AstrBot Python 插件，用于接收媒体服务器的通知并发送到群聊。
+一个用于 AstrBot 的媒体通知 Webhook 插件，支持接收来自各种媒体服务器的通知，并转发到指定的群组。
 
 ## 功能特性
 
-- 🌐 **HTTP Webhook 服务器** - 接收媒体通知请求
-- 🔄 **重复请求检测** - 使用MD5哈希防止重复处理
-- 📦 **批量消息处理** - 支持单独发送和合并转发
-- ⚙️ **灵活配置** - 可配置端口、群组、处理间隔等
-- 📊 **状态监控** - 提供状态查询和测试命令
-- 🎬 **多媒体类型支持** - 支持电影、剧集、专辑等多种媒体类型
+- 🎬 **多平台支持**: Jellyfin、Emby、Plex、Sonarr、Radarr、Ani-RSS 等
+- 📱 **智能消息**: 自动格式化，包含剧集信息、封面图片
+- 🔄 **防重复**: 智能去重，避免重复通知
+- 📊 **批量优化**: 支持合并转发，减少消息刷屏
+- 🎯 **平台识别**: 自动识别通知来源，添加平台前缀
+- 🔧 **容错处理**: 完善的错误处理和 JSON 修复
 
-## 安装配置
+## 快速开始
 
-### 1. 插件安装
-
-将插件文件夹放置到 AstrBot 的 `data/plugins/` 目录下：
-
-```
-AstrBot/
-└── data/
-    └── plugins/
-        └── astrbot_plugin_media_webhook/
-            ├── main.py
-            ├── metadata.yaml
-            ├── requirements.txt
-            ├── _conf_schema.json
-            └── README.md
-```
-
-### 2. 配置插件
-
-在 AstrBot 管理面板中找到 "Media Webhook" 插件，配置以下参数：
-
-- **group_id**: 目标群组ID（必填）
-- **webhook_port**: Webhook监听端口（默认: 60071）
-- **webhook_path**: Webhook路径（默认: /media-webhook）
-- **cache_ttl_seconds**: 重复请求缓存时间（默认: 300秒）
-- **batch_interval_seconds**: 批量处理间隔（默认: 300秒）
-- **batch_min_size**: 触发合并转发的最小消息数（默认: 3条）
-
-### 3. 启动插件
-
-在插件管理页面启用插件，插件将自动启动HTTP服务器。
-
-## 使用方法
-
-### Webhook 接口
-
-**接口地址**: `http://localhost:{port}{path}`
-**请求方法**: POST
-**Content-Type**: application/json
-
-### 请求格式
-
+### 1. 配置插件
 ```json
 {
-  "item_type": "Episode",
-  "series_name": "示例剧集",
-  "year": "2024",
-  "item_name": "第一集",
-  "season_number": 1,
-  "episode_number": 1,
-  "overview": "剧情简介",
-  "runtime": "45分钟",
-  "image_url": "https://example.com/poster.jpg"
+  "webhook_port": 60071,
+  "webhook_path": "/media-webhook",
+  "group_id": "your-group-id",
+  "platform_name": "aiocqhttp"
 }
 ```
 
-### 支持的媒体类型
-
-- **Movie**: 电影
-- **Series**: 剧集
-- **Season**: 剧季
-- **Episode**: 单集
-- **Album**: 专辑
-- **Song**: 歌曲
-- **Video**: 视频
-
-## 插件命令
-
-### `/webhook_status`
-查看Webhook服务状态，包括：
-- 服务地址
-- 队列消息数
-- 缓存请求数
-- 配置参数
-
-### `/webhook_test`
-发送测试消息，验证插件功能是否正常。
-
-## 测试工具
-
-插件提供了测试脚本 `test_webhook.py`，可以用来测试各种功能：
-
-```bash
-# 运行所有测试
-python test_webhook.py
-
-# 指定webhook地址
-python test_webhook.py --url http://localhost:60071/media-webhook
-
-# 运行特定测试
-python test_webhook.py --test single
-python test_webhook.py --test duplicate
-python test_webhook.py --test batch
-python test_webhook.py --test invalid
+### 2. 配置媒体服务器
+在您的媒体服务器中设置 Webhook URL：
+```
+http://your-bot-server:60071/media-webhook
 ```
 
-## 工作原理
+### 3. 测试功能
+```
+/webhook test        # 使用 BGM.TV 真实数据测试
+/webhook test static # 使用静态数据测试
+/webhook status      # 查看插件状态
+```
 
-1. **接收请求**: HTTP服务器接收媒体通知请求
-2. **重复检测**: 计算请求哈希值，检查是否为重复请求
-3. **消息格式化**: 将媒体数据转换为友好的消息格式
-4. **队列缓存**: 将消息添加到内存队列
-5. **批量处理**: 定时处理队列中的消息
-6. **智能发送**: 根据消息数量选择单独发送或合并转发
+## 支持的服务器
 
-## 消息格式示例
+| 服务器 | 状态 | 特殊说明 |
+|--------|------|----------|
+| **Jellyfin** | ✅ 完全支持 | 自动识别，支持图片 |
+| **Emby** | ✅ 完全支持 | 自动识别，支持图片 |
+| **Plex** | ✅ 完全支持 | 自动识别，支持图片 |
+| **Sonarr** | ✅ 完全支持 | 剧集下载通知 |
+| **Radarr** | ✅ 完全支持 | 电影下载通知 |
+| **Ani-RSS** | ✅ 完全支持 | 动画订阅，支持不完整 JSON 修复 |
+| **Overseerr** | ✅ 完全支持 | 请求管理通知 |
+| **Tautulli** | ✅ 完全支持 | Plex 统计通知 |
+
+## 消息效果
 
 ```
-🎬 新单集上线
+🤖 📺 新单集上线 [Jellyfin]
 
-剧集名称: 示例剧集 (2024)
-集号: S01E01
-集名称: 第一集
+剧集名称: 进击的巨人 最终季
+集号: S04E28
+集名称: 最终话
 
 剧情简介:
-这是一个示例剧情简介...
+艾伦·耶格尔的故事迎来最终章节...
 
-时长: 45分钟
+时长: 24分钟
 ```
 
-## 注意事项
+## 配置选项
 
-1. 确保配置的群组ID正确且机器人在该群组中
-2. 防火墙需要开放配置的端口
-3. 建议在生产环境中使用反向代理
-4. 定期检查日志以监控插件运行状态
+| 选项 | 默认值 | 说明 |
+|------|--------|------|
+| `webhook_port` | 60071 | Webhook 服务端口 |
+| `webhook_path` | /media-webhook | Webhook 路径 |
+| `group_id` | - | 目标群组 ID（必填） |
+| `platform_name` | aiocqhttp | 消息平台名称 |
+| `batch_min_size` | 3 | 批量发送最小数量 |
+| `batch_interval_seconds` | 300 | 批量发送间隔（秒） |
+| `cache_ttl_seconds` | 300 | 缓存过期时间（秒） |
+| `show_platform_prefix` | true | 显示平台前缀图标 |
+| `show_source_info` | true | 显示通知来源信息 |
+| `force_individual_send` | false | 强制单独发送 |
 
 ## 故障排除
 
 ### 常见问题
 
-1. **插件无法启动**
-   - 检查端口是否被占用
-   - 确认依赖包已正确安装
+**Q: 收到 "JSON 解析失败" 错误**
+A: 插件已支持自动修复不完整的 JSON，特别是 Ani-RSS 格式
 
-2. **消息发送失败**
-   - 验证群组ID配置
-   - 检查机器人权限
+**Q: 图片不显示**
+A: 检查网络连接和图片 URL 有效性
 
-3. **重复请求检测失效**
-   - 检查缓存TTL配置
-   - 确认请求数据格式一致
+**Q: 消息重复**
+A: 插件有防重复机制，检查缓存设置
 
-### 日志查看
+### 调试命令
+```
+/webhook status      # 查看运行状态
+/webhook test        # 测试基本功能
+```
 
-插件运行日志可在 AstrBot 日志中查看，关键词：`Media Webhook`
+## 更新记录
 
-## 开发说明
+详细的修复和更新记录请参考 [FIX_NOTES.md](FIX_NOTES.md)
 
-本插件基于原始 `webhook.js` 功能开发，主要改进：
+## Ani-RSS 支持
 
-- 使用 Python 异步编程提高性能
-- 集成 AstrBot 插件系统
-- 提供可视化配置界面
-- 增加测试工具和错误处理
-- 支持更多消息类型和格式
+完整的 Ani-RSS 兼容性说明请参考 [ANI_RSS_COMPATIBILITY.md](ANI_RSS_COMPATIBILITY.md)
 
 ## 许可证
 
-本插件遵循 MIT 许可证。
+MIT License
