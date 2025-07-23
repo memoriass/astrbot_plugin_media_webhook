@@ -34,5 +34,11 @@
     "type": "string",
     "hint": "HTTP服务器的接收路径",
     "default": "/media-webhook"
+  },
+  "platform_name": {
+    "description": "消息平台名称",
+    "type": "string",
+    "hint": "发送消息的平台名称，如 aiocqhttp、telegram 等",
+    "default": "aiocqhttp"
   }
 }

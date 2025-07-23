@@ -10,6 +10,8 @@ from aiohttp import web
 from aiohttp.web import Request, Response
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
+from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.message_type import MessageType
 from astrbot.api.star import Context, Star, register
 
 
@@ -278,9 +280,14 @@ class MediaWebhookPlugin(Star):
             forward_nodes.append(node)
 
         # 发送合并转发消息
-        unified_msg_origin = f"group_{group_id}"
+        platform_name = self.config.get("platform_name", "aiocqhttp")
+        session = MessageSesion(
+            platform_name=platform_name,
+            message_type=MessageType.GROUP_MESSAGE,
+            session_id=group_id
+        )
         message_chain = MessageChain(chain=forward_nodes)
-        await self.context.send_message(unified_msg_origin, message_chain)
+        await self.context.send_message(session, message_chain)
 
         logger.info(f"成功发送 {len(messages)} 条合并消息")
 
@@ -288,7 +295,12 @@ class MediaWebhookPlugin(Star):
         """发送单独消息"""
         logger.info(f"消息数量不足批量发送条件，准备单独发送 {len(messages)} 条消息")
 
-        unified_msg_origin = f"group_{group_id}"
+        platform_name = self.config.get("platform_name", "aiocqhttp")
+        session = MessageSesion(
+            platform_name=platform_name,
+            message_type=MessageType.GROUP_MESSAGE,
+            session_id=group_id
+        )
 
         for msg in messages:
             content = []
@@ -297,7 +309,7 @@ class MediaWebhookPlugin(Star):
             content.append(Comp.Plain(msg["message_text"]))
 
             message_chain = MessageChain(chain=content)
-            await self.context.send_message(unified_msg_origin, message_chain)
+            await self.context.send_message(session, message_chain)
 
         logger.info(f"成功发送 {len(messages)} 条单独消息")
 
