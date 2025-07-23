@@ -10,8 +10,6 @@ from aiohttp import web
 from aiohttp.web import Request, Response
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
-from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.core.platform.message_type import MessageType
 from astrbot.api.star import Context, Star, register
 
 
@@ -246,6 +244,10 @@ class MediaWebhookPlugin(Star):
             logger.warning("未配置群组ID，无法发送消息")
             return
 
+        # 清理 group_id，移除可能的冒号
+        group_id = str(group_id).replace(":", "_")
+        logger.debug(f"使用群组ID: {group_id}")
+
         messages = self.message_queue.copy()
         self.message_queue.clear()
 
@@ -281,13 +283,10 @@ class MediaWebhookPlugin(Star):
 
         # 发送合并转发消息
         platform_name = self.config.get("platform_name", "aiocqhttp")
-        session = MessageSesion(
-            platform_name=platform_name,
-            message_type=MessageType.GROUP_MESSAGE,
-            session_id=group_id
-        )
+        unified_msg_origin = f"{platform_name}:GroupMessage:{group_id}"
+        logger.debug(f"发送合并转发消息，unified_msg_origin: {unified_msg_origin}")
         message_chain = MessageChain(chain=forward_nodes)
-        await self.context.send_message(session, message_chain)
+        await self.context.send_message(unified_msg_origin, message_chain)
 
         logger.info(f"成功发送 {len(messages)} 条合并消息")
 
@@ -296,11 +295,8 @@ class MediaWebhookPlugin(Star):
         logger.info(f"消息数量不足批量发送条件，准备单独发送 {len(messages)} 条消息")
 
         platform_name = self.config.get("platform_name", "aiocqhttp")
-        session = MessageSesion(
-            platform_name=platform_name,
-            message_type=MessageType.GROUP_MESSAGE,
-            session_id=group_id
-        )
+        unified_msg_origin = f"{platform_name}:GroupMessage:{group_id}"
+        logger.debug(f"发送单独消息，unified_msg_origin: {unified_msg_origin}")
 
         for msg in messages:
             content = []
@@ -309,7 +305,7 @@ class MediaWebhookPlugin(Star):
             content.append(Comp.Plain(msg["message_text"]))
 
             message_chain = MessageChain(chain=content)
-            await self.context.send_message(session, message_chain)
+            await self.context.send_message(unified_msg_origin, message_chain)
 
         logger.info(f"成功发送 {len(messages)} 条单独消息")
 

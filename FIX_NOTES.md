@@ -47,12 +47,10 @@ await self.context.send_message(unified_msg_origin, message_chain)
 
 # 修复后
 platform_name = self.config.get("platform_name", "aiocqhttp")
-session = MessageSesion(
-    platform_name=platform_name,
-    message_type=MessageType.GROUP_MESSAGE,
-    session_id=group_id
-)
-await self.context.send_message(session, message_chain)
+# 清理 group_id，移除可能的冒号
+group_id = str(group_id).replace(":", "_")
+unified_msg_origin = f"{platform_name}:GroupMessage:{group_id}"
+await self.context.send_message(unified_msg_origin, message_chain)
 ```
 
 ### 5. 添加了平台名称配置
@@ -81,6 +79,30 @@ await self.context.send_message(session, message_chain)
 
 3. 插件现在应该能够正常发送消息到指定的群组
 
+### 6. 添加了调试日志和群组ID清理
+- 添加了调试日志来跟踪消息发送过程
+- 清理群组ID中的冒号字符，避免解析错误
+
 ## 测试
 
-修复后的代码已通过基本测试，能够正确创建 `MessageSesion` 对象并进行字符串转换。
+修复后的代码已通过基本测试：
+1. 能够正确构造 `unified_msg_origin` 字符串格式
+2. 字符串格式符合 `platform_name:message_type:session_id` 的要求
+3. 能够被 `MessageSesion.from_str()` 正确解析
+
+## 常见问题
+
+### Q: 仍然出现 "not enough values to unpack" 错误怎么办？
+A: 请检查以下配置：
+1. 确保 `group_id` 配置正确，不包含冒号等特殊字符
+2. 确保 `platform_name` 配置正确，与实际使用的平台匹配
+3. 检查 AstrBot 日志中的调试信息，确认 `unified_msg_origin` 格式正确
+
+### Q: 支持哪些平台？
+A: 常见的平台名称包括：
+- `aiocqhttp` - QQ 个人号
+- `telegram` - Telegram
+- `qqofficial` - QQ 官方接口
+- `discord` - Discord
+- `lark` - 飞书
+- `dingtalk` - 钉钉
