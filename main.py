@@ -273,13 +273,13 @@ class MediaWebhookPlugin(Star):
             content.append(Comp.Plain(msg["message_text"]))
 
             node = Comp.Node(
-                uin="2659908767", name="媒体通知", content=content  # 可以配置化
+                content=content, uin="2659908767", name="媒体通知"  # 可以配置化
             )
             forward_nodes.append(node)
 
         # 发送合并转发消息
         unified_msg_origin = f"group_{group_id}"
-        message_chain = MessageChain(forward_nodes)
+        message_chain = MessageChain(chain=forward_nodes)
         await self.context.send_message(unified_msg_origin, message_chain)
 
         logger.info(f"成功发送 {len(messages)} 条合并消息")
@@ -296,7 +296,7 @@ class MediaWebhookPlugin(Star):
                 content.append(Comp.Image.fromURL(msg["image_url"]))
             content.append(Comp.Plain(msg["message_text"]))
 
-            message_chain = MessageChain(content)
+            message_chain = MessageChain(chain=content)
             await self.context.send_message(unified_msg_origin, message_chain)
 
         logger.info(f"成功发送 {len(messages)} 条单独消息")
