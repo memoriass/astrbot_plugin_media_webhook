@@ -134,21 +134,40 @@ class MediaWebhookPlugin(Star):
             if not body_text:
                 return Response(text="请求体为空", status=400)
 
-            raw_data = json.loads(body_text)
+            # 尝试解析 JSON，如果失败则检查是否为 Ani-RSS 文本模板
+            try:
+                raw_data = json.loads(body_text)
+                is_text_template = False
+            except json.JSONDecodeError:
+                # 检查是否为 Ani-RSS 文本模板
+                if self.is_ani_rss_text_template(body_text):
+                    raw_data = {"text_template": body_text}
+                    is_text_template = True
+                    logger.info("检测到 ani-rss 文本模板格式")
+                else:
+                    logger.error("Webhook 请求体解析失败: 无效的JSON格式且不是已知的文本模板")
+                    return Response(text="无效的数据格式", status=400)
 
             # 检测通知来源
             headers = dict(request.headers)
-            source = self.detect_notification_source(raw_data, headers)
+            if is_text_template:
+                source = "ani-rss"
+            else:
+                source = self.detect_notification_source(raw_data, headers)
 
             # 处理 ani-rss 数据格式
             if source == "ani-rss":
-                media_data = self.convert_ani_rss_to_media_data(raw_data)
-                logger.info("检测到 ani-rss 格式数据，已转换为标准格式")
+                if is_text_template:
+                    media_data = self.convert_ani_rss_text_template_to_media_data(body_text)
+                    logger.info("检测到 ani-rss 文本模板，已转换为标准格式")
+                else:
+                    media_data = self.convert_ani_rss_to_media_data(raw_data)
+                    logger.info("检测到 ani-rss JSON 格式数据，已转换为标准格式")
             else:
                 media_data = raw_data
 
             # 计算请求哈希值
-            request_hash = self.calculate_body_hash(raw_data)
+            request_hash = self.calculate_body_hash({"source": source, "data": str(raw_data)[:100]})
 
             # 检查重复请求
             if request_hash and self.is_duplicate_request(request_hash):
@@ -224,6 +243,21 @@ class MediaWebhookPlugin(Star):
         found_fields = sum(1 for field in ani_rss_fields if field in data)
         return found_fields >= 3
 
+    def is_ani_rss_text_template(self, text: str) -> bool:
+        """检查是否为 ani-rss 文本模板"""
+        # 检查 ani-rss 文本模板的特征
+        ani_rss_template_patterns = [
+            "${emoji}", "${action}", "${title}", "${score}", "${tmdburl}",
+            "${themoviedbName}", "${bgmUrl}", "${season}", "${episode}",
+            "${subgroup}", "${currentEpisodeNumber}", "${totalEpisodeNumber}",
+            "${year}", "${month}", "${date}", "${text}", "${downloadPath}",
+            "${episodeTitle}"
+        ]
+
+        # 如果包含多个模板变量，则认为是 ani-rss 文本模板
+        found_patterns = sum(1 for pattern in ani_rss_template_patterns if pattern in text)
+        return found_patterns >= 3
+
     def parse_ani_rss_webhook_body(self, webhook_body: str) -> Dict:
         """解析 ani-rss 的 webHookBody 字段"""
         try:
@@ -278,6 +312,69 @@ class MediaWebhookPlugin(Star):
                 "series_name": "Ani-RSS 通知",
                 "item_name": "动画更新通知",
                 "overview": "来自 Ani-RSS 的动画更新通知"
+            }
+
+    def parse_ani_rss_text_template(self, template_text: str) -> Dict:
+        """解析 ani-rss 文本模板，提取变量信息"""
+        import re
+
+        # 提取模板变量的值（这里是模拟，实际值由 ani-rss 填充）
+        template_vars = {}
+
+        # 查找所有模板变量
+        pattern = r'\$\{([^}]+)\}'
+        matches = re.findall(pattern, template_text)
+
+        for var in matches:
+            template_vars[var] = f"${{{var}}}"  # 保留模板格式
+
+        return template_vars
+
+    def convert_ani_rss_text_template_to_media_data(self, template_text: str) -> Dict:
+        """将 ani-rss 文本模板转换为标准媒体数据格式"""
+        try:
+            # 解析模板变量
+            template_vars = self.parse_ani_rss_text_template(template_text)
+
+            # 构建标准格式的媒体数据
+            media_data = {
+                "item_type": "Episode",
+                "series_name": template_vars.get("title", "Ani-RSS 通知"),
+                "item_name": template_vars.get("episodeTitle", "动画更新通知"),
+                "overview": f"来自 Ani-RSS 的动画更新通知\n\n原始模板:\n{template_text[:200]}...",
+                "runtime": "",
+                "year": template_vars.get("year", ""),
+                "season_number": template_vars.get("season", ""),
+                "episode_number": template_vars.get("episode", ""),
+            }
+
+            # 添加额外信息到 overview
+            extra_info = []
+            if "score" in template_vars:
+                extra_info.append(f"评分: {template_vars['score']}")
+            if "subgroup" in template_vars:
+                extra_info.append(f"字幕组: {template_vars['subgroup']}")
+            if "currentEpisodeNumber" in template_vars and "totalEpisodeNumber" in template_vars:
+                extra_info.append(f"进度: {template_vars['currentEpisodeNumber']}/{template_vars['totalEpisodeNumber']}")
+
+            if extra_info:
+                media_data["overview"] += "\n\n" + "\n".join(extra_info)
+
+            # 检查是否有图片相关信息（虽然模板中没有直接的图片URL）
+            # 可以根据需要添加默认图片
+            if any(var in template_vars for var in ["tmdburl", "bgmUrl"]):
+                media_data["image_url"] = "https://picsum.photos/300/450"
+
+            return media_data
+
+        except Exception as e:
+            logger.error(f"转换 ani-rss 文本模板失败: {e}")
+            # 返回基本的媒体数据
+            return {
+                "item_type": "Episode",
+                "series_name": "Ani-RSS 通知",
+                "item_name": "动画更新通知",
+                "overview": f"来自 Ani-RSS 的动画更新通知\n\n{template_text[:100]}..."
             }
 
     def detect_notification_source(self, data: Dict, headers: Dict) -> str:

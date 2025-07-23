@@ -128,12 +128,15 @@ await self.context.send_message(unified_msg_origin, message_chain)
 - 消息格式优化：`🤖 📺 新单集上线 [Jellyfin]`
 
 ### 12. 新增 Ani-RSS 项目兼容性支持
-- 添加了 `is_ani_rss_data()` 方法检测 ani-rss 数据格式
+- 添加了 `is_ani_rss_data()` 方法检测 ani-rss JSON 数据格式
+- 添加了 `is_ani_rss_text_template()` 方法检测 ani-rss 文本模板格式
 - 添加了 `parse_ani_rss_webhook_body()` 方法解析 webHookBody 字段
-- 添加了 `convert_ani_rss_to_media_data()` 方法转换数据格式
-- 支持 ani-rss 的配置数据格式，自动转换为标准媒体通知
-- 智能检测 webHookBody 中的图片和文本信息
-- 完全兼容 ani-rss 项目的 webhook 推送格式
+- 添加了 `convert_ani_rss_to_media_data()` 方法转换 JSON 数据格式
+- 添加了 `parse_ani_rss_text_template()` 方法解析文本模板变量
+- 添加了 `convert_ani_rss_text_template_to_media_data()` 方法转换文本模板
+- 支持 ani-rss 的配置数据和文本模板两种格式
+- 智能检测模板变量：${title}、${season}、${episode}、${score} 等
+- 完全解决 "JSON 解析失败" 问题，兼容所有 ani-rss 推送格式
 
 ## 测试
 

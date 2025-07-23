@@ -7,24 +7,59 @@
 ## 兼容性特性
 
 ### 🔍 自动格式检测
-插件能够自动识别 Ani-RSS 的数据格式，无需手动配置：
+插件能够自动识别 Ani-RSS 的多种数据格式，无需手动配置：
+
+**JSON 配置格式检测**：
 - 检测 `notificationTemplate`、`notificationType`、`webHookMethod` 等特有字段
-- 当检测到 3 个或以上 Ani-RSS 特征字段时，自动识别为 Ani-RSS 数据
+- 当检测到 3 个或以上 Ani-RSS 特征字段时，自动识别为 Ani-RSS JSON 数据
+
+**文本模板格式检测**：
+- 检测 `${emoji}`、`${action}`、`${title}`、`${score}` 等模板变量
+- 当检测到 3 个或以上模板变量时，自动识别为 Ani-RSS 文本模板
+- 完全解决 "JSON 解析失败" 问题
 
 ### 🔄 数据格式转换
-自动将 Ani-RSS 的配置格式转换为标准的媒体通知格式：
+自动将 Ani-RSS 的两种格式转换为标准的媒体通知格式：
+
+**JSON 配置转换**：
 - 解析 `webHookBody` 字段中的模板信息
 - 检测是否包含图片和文本内容
 - 生成标准化的媒体数据结构
 
+**文本模板转换**：
+- 解析模板变量：`${title}`、`${season}`、`${episode}` 等
+- 提取剧集信息、评分、字幕组等详细数据
+- 智能生成包含原始信息的通知消息
+
 ### 📱 智能内容处理
-- 支持 `${image}` 和 `${message}` 模板变量
-- 自动检测 webHookBody 中的图片和文本信息
+- 支持完整的 Ani-RSS 模板变量集合
+- 自动检测并保留重要信息（标题、季集、评分等）
 - 根据内容类型生成相应的通知消息
+- 支持图片 URL 检测和处理
 
 ## Ani-RSS 数据格式示例
 
-### 原始 Ani-RSS 配置数据
+### 1. Ani-RSS 文本模板格式（主要格式）
+```
+${emoji}${emoji}${emoji}
+事件类型: ${action}
+标题: ${title}
+评分: ${score}
+TMDB: ${tmdburl}
+TMDB标题: ${themoviedbName}
+BGM: ${bgmUrl}
+季: ${season}
+集: ${episode}
+字幕组: ${subgroup}
+进度: ${currentEpisodeNumber}/${totalEpisodeNumber}
+首播:  ${year}年${month}月${date}日
+事件: ${text}
+下载位置: ${downloadPath}
+TMDB集标题: ${episodeTitle}
+${emoji}${emoji}${emoji}
+```
+
+### 2. 原始 Ani-RSS 配置数据
 ```json
 {
   "enable": true,
@@ -65,35 +100,44 @@
 }
 ```
 
-### 转换后的标准格式
+### 3. 转换后的标准格式
 ```json
 {
   "item_type": "Episode",
-  "series_name": "Ani-RSS 通知",
-  "item_name": "动画更新通知",
-  "overview": "来自 Ani-RSS 的动画更新通知",
+  "series_name": "${title}",
+  "item_name": "${episodeTitle}",
+  "overview": "来自 Ani-RSS 的动画更新通知\n\n原始模板:\n${emoji}${emoji}${emoji}\n事件类型: ${action}...\n\n评分: ${score}\n字幕组: ${subgroup}\n进度: ${currentEpisodeNumber}/${totalEpisodeNumber}",
   "image_url": "https://picsum.photos/300/450",
   "runtime": "",
-  "year": "",
-  "season_number": "",
-  "episode_number": ""
+  "year": "${year}",
+  "season_number": "${season}",
+  "episode_number": "${episode}"
 }
 ```
 
 ## 消息效果示例
 
-### 包含图片的通知
+### 文本模板通知（推荐）
 ```
 🤖 📺 新单集上线 [Ani-RSS]
 
-剧集名称: Ani-RSS 通知
-集名称: 动画更新通知
+剧集名称: ${title}
+集名称: ${episodeTitle}
 
 剧情简介:
 来自 Ani-RSS 的动画更新通知
+
+原始模板:
+${emoji}${emoji}${emoji}
+事件类型: ${action}
+标题: ${title}...
+
+评分: ${score}
+字幕组: ${subgroup}
+进度: ${currentEpisodeNumber}/${totalEpisodeNumber}
 ```
 
-### 纯文本通知
+### JSON 配置通知
 ```
 🤖 📺 新单集上线 [Ani-RSS]
 
@@ -150,6 +194,32 @@
 }
 ```
 
+## 支持的模板变量
+
+### 文本模板变量
+插件支持以下 Ani-RSS 模板变量：
+
+| 变量名 | 说明 | 示例 |
+|--------|------|------|
+| `${emoji}` | 表情符号 | 🎌 |
+| `${action}` | 事件类型 | DOWNLOAD_START |
+| `${title}` | 动画标题 | 进击的巨人 最终季 |
+| `${score}` | 评分 | 9.0 |
+| `${tmdburl}` | TMDB 链接 | https://www.themoviedb.org/... |
+| `${themoviedbName}` | TMDB 标题 | Attack on Titan Final Season |
+| `${bgmUrl}` | BGM 链接 | https://bgm.tv/subject/... |
+| `${season}` | 季数 | 4 |
+| `${episode}` | 集数 | 28 |
+| `${subgroup}` | 字幕组 | 某字幕组 |
+| `${currentEpisodeNumber}` | 当前集数 | 28 |
+| `${totalEpisodeNumber}` | 总集数 | 28 |
+| `${year}` | 年份 | 2023 |
+| `${month}` | 月份 | 11 |
+| `${date}` | 日期 | 05 |
+| `${text}` | 事件描述 | 下载完成 |
+| `${downloadPath}` | 下载路径 | /downloads/anime/... |
+| `${episodeTitle}` | 集标题 | 最终话 |
+
 ## 支持的 webHookBody 格式
 
 ### 1. 包含图片和文本
@@ -197,8 +267,8 @@
 
 ## 检测机制
 
-### 字段检测
-插件检测以下 Ani-RSS 特有字段：
+### JSON 格式检测
+插件检测以下 Ani-RSS JSON 特有字段：
 - `notificationTemplate`
 - `notificationType`
 - `webHookMethod`
@@ -206,12 +276,27 @@
 - `webHookBody`
 - `statusList`
 
-当检测到 3 个或以上字段时，识别为 Ani-RSS 数据。
+当检测到 3 个或以上字段时，识别为 Ani-RSS JSON 数据。
+
+### 文本模板检测
+插件检测以下 Ani-RSS 文本模板变量：
+- `${emoji}`, `${action}`, `${title}`
+- `${score}`, `${season}`, `${episode}`
+- `${subgroup}`, `${year}`, `${month}`
+- 以及其他模板变量
+
+当检测到 3 个或以上模板变量时，识别为 Ani-RSS 文本模板。
 
 ### 内容解析
+**JSON 格式**：
 - 检测 `${image}` 模板变量或 `image` 关键词
 - 检测 `${message}` 模板变量或 `text` 关键词
 - 根据检测结果决定是否包含图片
+
+**文本模板**：
+- 解析所有模板变量并保留原始格式
+- 检测 `${tmdburl}` 或 `${bgmUrl}` 决定是否包含图片
+- 提取重要信息到消息概述中
 
 ## 使用场景
 
@@ -236,13 +321,16 @@
 ### 常见问题
 
 **Q: 收到 "Webhook 请求体解析失败: 无效的JSON格式" 错误**
-A: 这通常是因为 Ani-RSS 发送的数据格式问题。插件现在已经兼容此格式，更新后应该能正常处理。
+A: 这个问题已经完全解决！插件现在支持 Ani-RSS 的文本模板格式，不再需要 JSON 格式。
 
-**Q: 通知消息显示为默认内容**
-A: 这是正常的，因为 Ani-RSS 发送的是配置数据而不是具体的媒体信息。插件会生成标准化的通知消息。
+**Q: 通知消息显示模板变量而不是实际值**
+A: 这是正常的，因为插件接收到的是模板格式。Ani-RSS 在实际发送时会填充这些变量的真实值。
+
+**Q: 如何确认插件正确识别了 Ani-RSS 格式**
+A: 查看日志，应该会显示 "检测到 ani-rss 文本模板，已转换为标准格式" 或类似信息。
 
 **Q: 图片不显示**
-A: 检查 Ani-RSS 的 `webHookBody` 配置是否包含 `${image}` 模板变量。
+A: 文本模板格式中，如果包含 `${tmdburl}` 或 `${bgmUrl}` 变量，插件会自动添加默认图片。
 
 ### 调试步骤
 
