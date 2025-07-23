@@ -1,0 +1,38 @@
+{
+  "group_id": {
+    "description": "目标群组ID",
+    "type": "string",
+    "hint": "接收媒体通知的群组ID",
+    "default": ""
+  },
+  "webhook_port": {
+    "description": "Webhook监听端口",
+    "type": "int",
+    "hint": "HTTP服务器监听的端口号",
+    "default": 60071
+  },
+  "cache_ttl_seconds": {
+    "description": "重复请求缓存过期时间(秒)",
+    "type": "int",
+    "hint": "防止重复处理相同请求的缓存时间",
+    "default": 300
+  },
+  "batch_interval_seconds": {
+    "description": "批量发送间隔(秒)",
+    "type": "int",
+    "hint": "批量处理消息队列的时间间隔",
+    "default": 300
+  },
+  "batch_min_size": {
+    "description": "触发合并转发的最小消息数",
+    "type": "int",
+    "hint": "达到此数量时使用合并转发，否则单独发送",
+    "default": 3
+  },
+  "webhook_path": {
+    "description": "Webhook路径",
+    "type": "string",
+    "hint": "HTTP服务器的接收路径",
+    "default": "/media-webhook"
+  }
+}
