@@ -127,15 +127,17 @@ await self.context.send_message(unified_msg_origin, message_chain)
   - `show_source_info`：控制是否显示通知来源信息
 - 消息格式优化：`🤖 📺 新单集上线 [Jellyfin]`
 
-### 12. 新增 Ani-RSS 项目兼容性支持
-- 添加了 `is_ani_rss_data()` 方法检测 ani-rss JSON 数据格式
+### 12. 新增 Ani-RSS 项目完整兼容性支持
+- 添加了 `is_ani_rss_data()` 方法检测 ani-rss JSON 配置格式
 - 添加了 `is_ani_rss_text_template()` 方法检测 ani-rss 文本模板格式
-- 添加了 `parse_ani_rss_webhook_body()` 方法解析 webHookBody 字段
-- 添加了 `convert_ani_rss_to_media_data()` 方法转换 JSON 数据格式
-- 添加了 `parse_ani_rss_text_template()` 方法解析文本模板变量
-- 添加了 `convert_ani_rss_text_template_to_media_data()` 方法转换文本模板
-- 支持 ani-rss 的配置数据和文本模板两种格式
-- 智能检测模板变量：${title}、${season}、${episode}、${score} 等
+- 添加了 `is_ani_rss_message_format()` 方法检测 ani-rss 真实消息格式
+- 添加了 `convert_ani_rss_message_to_media_data()` 方法转换消息格式
+- 添加了 `parse_ani_rss_text_content()` 方法解析文本内容
+- 支持 User-Agent 识别：`wushuo894/ani-rss`
+- 支持真实的 `meassage` 数组格式（注意拼写）
+- 支持图片类型消息（`image` + `file` URL）
+- 支持文本类型消息（`text` + 结构化内容）
+- 智能提取剧集信息：标题、季集、年份、图片等
 - 完全解决 "JSON 解析失败" 问题，兼容所有 ani-rss 推送格式
 
 ## 测试

@@ -39,7 +39,33 @@
 
 ## Ani-RSS 数据格式示例
 
-### 1. Ani-RSS 文本模板格式（主要格式）
+### 1. Ani-RSS 真实消息格式（实际使用格式）
+```json
+{
+  "meassage": [
+    {
+      "type": "image",
+      "data": {
+        "file": "https://lain.bgm.tv/pic/cover/l/7c/8e/424883_BpzVb.jpg"
+      }
+    },
+    {
+      "type": "text",
+      "data": {
+        "text": "🎈🎈🎈\n事件类型: 开始下载\n标题: 不时用俄语小声说真心话的邻桌艾莉同学\n评分: 8.0\nTMDB: https://www.themoviedb.org/tv/235758\nTMDB标题: test\nBGM: https://bgm.tv/subject/424883\n季: 1\n集: 1\n字幕组: 未知字幕组\n进度: 2/12\n首播:  2024年1月1日\n事件: test\n下载位置: C:/Media/番剧/B/不时用俄语小声说真心话的邻桌艾莉同学/Season 1\nTMDB集标题: 第1集\n🎈🎈🎈"
+      }
+    }
+  ]
+}
+```
+
+**请求头信息**：
+```
+User-Agent: wushuo894/ani-rss (https://github.com/wushuo894/ani-rss)
+Content-Type: application/json;charset=UTF-8
+```
+
+### 2. Ani-RSS 文本模板格式（配置格式）
 ```
 ${emoji}${emoji}${emoji}
 事件类型: ${action}
@@ -100,49 +126,55 @@ ${emoji}${emoji}${emoji}
 }
 ```
 
-### 3. 转换后的标准格式
+### 4. 转换后的标准格式
 ```json
 {
   "item_type": "Episode",
-  "series_name": "${title}",
-  "item_name": "${episodeTitle}",
-  "overview": "来自 Ani-RSS 的动画更新通知\n\n原始模板:\n${emoji}${emoji}${emoji}\n事件类型: ${action}...\n\n评分: ${score}\n字幕组: ${subgroup}\n进度: ${currentEpisodeNumber}/${totalEpisodeNumber}",
-  "image_url": "https://picsum.photos/300/450",
+  "series_name": "不时用俄语小声说真心话的邻桌艾莉同学",
+  "item_name": "第1集",
+  "overview": "来自 Ani-RSS 的动画更新通知\n\n🎈🎈🎈\n事件类型: 开始下载\n标题: 不时用俄语小声说真心话的邻桌艾莉同学\n评分: 8.0\nTMDB: https://www.themoviedb.org/tv/235758...",
+  "image_url": "https://lain.bgm.tv/pic/cover/l/7c/8e/424883_BpzVb.jpg",
   "runtime": "",
-  "year": "${year}",
-  "season_number": "${season}",
-  "episode_number": "${episode}"
+  "year": "2024",
+  "season_number": "1",
+  "episode_number": "1"
 }
 ```
 
 ## 消息效果示例
 
-### 文本模板通知（推荐）
+### 真实消息通知（推荐）
+```
+🤖 📺 新单集上线 [Ani-RSS]
+
+剧集名称: 不时用俄语小声说真心话的邻桌艾莉同学
+集名称: 第1集
+集号: S01E01
+
+剧情简介:
+来自 Ani-RSS 的动画更新通知
+
+🎈🎈🎈
+事件类型: 开始下载
+标题: 不时用俄语小声说真心话的邻桌艾莉同学
+评分: 8.0
+TMDB: https://www.themoviedb.org/tv/235758
+BGM: https://bgm.tv/subject/424883
+季: 1
+集: 1
+字幕组: 未知字幕组
+进度: 2/12
+首播:  2024年1月1日
+下载位置: C:/Media/番剧/B/不时用俄语小声说真心话的邻桌艾莉同学/Season 1
+🎈🎈🎈
+```
+
+### 文本模板通知
 ```
 🤖 📺 新单集上线 [Ani-RSS]
 
 剧集名称: ${title}
 集名称: ${episodeTitle}
-
-剧情简介:
-来自 Ani-RSS 的动画更新通知
-
-原始模板:
-${emoji}${emoji}${emoji}
-事件类型: ${action}
-标题: ${title}...
-
-评分: ${score}
-字幕组: ${subgroup}
-进度: ${currentEpisodeNumber}/${totalEpisodeNumber}
-```
-
-### JSON 配置通知
-```
-🤖 📺 新单集上线 [Ani-RSS]
-
-剧集名称: Ani-RSS 通知
-集名称: 动画更新通知
 
 剧情简介:
 来自 Ani-RSS 的动画更新通知
@@ -267,8 +299,20 @@ ${emoji}${emoji}${emoji}
 
 ## 检测机制
 
-### JSON 格式检测
-插件检测以下 Ani-RSS JSON 特有字段：
+### User-Agent 检测
+插件首先检查 HTTP 请求头中的 User-Agent：
+```
+User-Agent: wushuo894/ani-rss (https://github.com/wushuo894/ani-rss)
+```
+
+### 消息格式检测
+插件检测 Ani-RSS 真实消息格式特征：
+- `meassage` 数组字段（注意拼写为 `meassage`）
+- 消息类型：`image` 和 `text`
+- 数据结构：`type` + `data` 组合
+
+### JSON 配置检测
+插件检测以下 Ani-RSS JSON 配置特有字段：
 - `notificationTemplate`
 - `notificationType`
 - `webHookMethod`
@@ -276,7 +320,7 @@ ${emoji}${emoji}${emoji}
 - `webHookBody`
 - `statusList`
 
-当检测到 3 个或以上字段时，识别为 Ani-RSS JSON 数据。
+当检测到 3 个或以上字段时，识别为 Ani-RSS JSON 配置。
 
 ### 文本模板检测
 插件检测以下 Ani-RSS 文本模板变量：

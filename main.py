@@ -160,9 +160,12 @@ class MediaWebhookPlugin(Star):
                 if is_text_template:
                     media_data = self.convert_ani_rss_text_template_to_media_data(body_text)
                     logger.info("检测到 ani-rss 文本模板，已转换为标准格式")
+                elif self.is_ani_rss_message_format(raw_data):
+                    media_data = self.convert_ani_rss_message_to_media_data(raw_data)
+                    logger.info("检测到 ani-rss 消息格式，已转换为标准格式")
                 else:
                     media_data = self.convert_ani_rss_to_media_data(raw_data)
-                    logger.info("检测到 ani-rss JSON 格式数据，已转换为标准格式")
+                    logger.info("检测到 ani-rss 配置格式数据，已转换为标准格式")
             else:
                 media_data = raw_data
 
@@ -242,6 +245,20 @@ class MediaWebhookPlugin(Star):
         # 如果包含多个 ani-rss 特有字段，则认为是 ani-rss 数据
         found_fields = sum(1 for field in ani_rss_fields if field in data)
         return found_fields >= 3
+
+    def is_ani_rss_message_format(self, data: Dict) -> bool:
+        """检查是否为 ani-rss 消息格式"""
+        # 检查是否有 meassage 字段（注意拼写）
+        if "meassage" in data:
+            messages = data.get("meassage", [])
+            if isinstance(messages, list) and len(messages) > 0:
+                # 检查消息格式
+                for msg in messages:
+                    if isinstance(msg, dict) and "type" in msg and "data" in msg:
+                        msg_type = msg.get("type")
+                        if msg_type in ["image", "text"]:
+                            return True
+        return False
 
     def is_ani_rss_text_template(self, text: str) -> bool:
         """检查是否为 ani-rss 文本模板"""
@@ -377,14 +394,109 @@ class MediaWebhookPlugin(Star):
                 "overview": f"来自 Ani-RSS 的动画更新通知\n\n{template_text[:100]}..."
             }
 
+    def convert_ani_rss_message_to_media_data(self, data: Dict) -> Dict:
+        """将 ani-rss 消息格式转换为标准媒体数据格式"""
+        try:
+            messages = data.get("meassage", [])
+
+            # 提取图片和文本信息
+            image_url = ""
+            text_content = ""
+
+            for msg in messages:
+                if isinstance(msg, dict):
+                    msg_type = msg.get("type")
+                    msg_data = msg.get("data", {})
+
+                    if msg_type == "image":
+                        image_url = msg_data.get("file", "")
+                    elif msg_type == "text":
+                        text_content = msg_data.get("text", "")
+
+            # 解析文本内容中的信息
+            media_data = self.parse_ani_rss_text_content(text_content)
+
+            # 添加图片URL
+            if image_url:
+                media_data["image_url"] = image_url
+
+            return media_data
+
+        except Exception as e:
+            logger.error(f"转换 ani-rss 消息格式失败: {e}")
+            return {
+                "item_type": "Episode",
+                "series_name": "Ani-RSS 通知",
+                "item_name": "动画更新通知",
+                "overview": "来自 Ani-RSS 的动画更新通知"
+            }
+
+    def parse_ani_rss_text_content(self, text_content: str) -> Dict:
+        """解析 ani-rss 文本内容，提取媒体信息"""
+        try:
+            # 初始化媒体数据
+            media_data = {
+                "item_type": "Episode",
+                "series_name": "Ani-RSS 通知",
+                "item_name": "动画更新通知",
+                "overview": text_content,
+                "runtime": "",
+                "year": "",
+                "season_number": "",
+                "episode_number": "",
+            }
+
+            # 解析文本中的信息
+            lines = text_content.split('\n')
+            for line in lines:
+                line = line.strip()
+                if ':' in line:
+                    key, value = line.split(':', 1)
+                    key = key.strip()
+                    value = value.strip()
+
+                    if key == "标题":
+                        media_data["series_name"] = value
+                    elif key == "季":
+                        media_data["season_number"] = value
+                    elif key == "集":
+                        media_data["episode_number"] = value
+                    elif key == "TMDB集标题":
+                        media_data["item_name"] = value
+                    elif key == "首播":
+                        # 提取年份
+                        import re
+                        year_match = re.search(r'(\d{4})', value)
+                        if year_match:
+                            media_data["year"] = year_match.group(1)
+
+            return media_data
+
+        except Exception as e:
+            logger.error(f"解析 ani-rss 文本内容失败: {e}")
+            return {
+                "item_type": "Episode",
+                "series_name": "Ani-RSS 通知",
+                "item_name": "动画更新通知",
+                "overview": text_content
+            }
+
     def detect_notification_source(self, data: Dict, headers: Dict) -> str:
         """检测通知来源"""
-        # 检查 ani-rss 特征
+        # 检查 User-Agent 中的 ani-rss 特征
+        user_agent = headers.get("user-agent", "").lower()
+        if "ani-rss" in user_agent:
+            return "ani-rss"
+
+        # 检查 ani-rss 数据格式特征
+        if self.is_ani_rss_message_format(data):
+            return "ani-rss"
+
+        # 检查传统 ani-rss 配置格式
         if self.is_ani_rss_data(data):
             return "ani-rss"
 
-        # 检查User-Agent
-        user_agent = headers.get("user-agent", "").lower()
+        # 检查其他平台的User-Agent
         if "jellyfin" in user_agent:
             return "jellyfin"
         elif "emby" in user_agent:
