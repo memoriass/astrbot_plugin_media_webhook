@@ -366,9 +366,19 @@ class MediaWebhookPlugin(Star):
 
     def _add_to_queue(self, media_data: Dict, source: str):
         """添加消息到队列"""
+
+        # 对于 Ani-RSS，需要特殊处理图片提取
+        if source == "ani-rss":
+            ani_rss_content = self.extract_ani_rss_content(media_data)
+            image_url = ani_rss_content.get("image_url", "")
+            message_text = ani_rss_content.get("text", "")
+        else:
+            image_url = media_data.get("image_url", "")
+            message_text = self.generate_message_text(media_data, source)
+
         message_payload = {
-            "image_url": media_data.get("image_url", ""),
-            "message_text": self.generate_message_text(media_data, source),
+            "image_url": image_url,
+            "message_text": message_text,
             "timestamp": time.time(),
             "source": source,
         }
@@ -376,7 +386,8 @@ class MediaWebhookPlugin(Star):
         self.message_queue.append(message_payload)
 
         source_name = self.source_map.get(source, source)
-        logger.info(f"新 {media_data.get('item_type', 'Unknown')} 通知已加入队列 [来源: {source_name}]")
+        item_type = media_data.get('item_type', 'Unknown') if source != "ani-rss" else "Ani-RSS"
+        logger.info(f"新 {item_type} 通知已加入队列 [来源: {source_name}]")
 
     def _save_failed_request(self, body_text: str, headers: Dict):
         """保存失败的请求到文件"""
@@ -1338,48 +1349,76 @@ class MediaWebhookPlugin(Star):
 
         return "\n\n".join(message_parts)
 
-    def generate_ani_rss_raw_message(self, data: Dict) -> str:
-        """为 Ani-RSS 生成原始格式消息"""
+    def extract_ani_rss_content(self, data: Dict) -> Dict:
+        """提取 Ani-RSS 的内容（包括图片和文本）"""
         try:
+            result = {
+                "text": "",
+                "image_url": ""
+            }
+
             # 检查是否为 Ani-RSS 真实消息格式
             if "meassage" in data:
                 messages = data.get("meassage", [])
-                text_content = ""
 
                 for msg in messages:
-                    if isinstance(msg, dict) and msg.get("type") == "text":
-                        text_data = msg.get("data", {})
-                        text_content = text_data.get("text", "")
-                        break
+                    if isinstance(msg, dict):
+                        msg_type = msg.get("type")
+                        msg_data = msg.get("data", {})
 
-                if text_content:
-                    return text_content
+                        if msg_type == "text":
+                            result["text"] = msg_data.get("text", "")
+                        elif msg_type == "image":
+                            result["image_url"] = msg_data.get("file", "")
+
+                return result
 
             # 检查是否为文本模板格式
             if "text_template" in data:
-                return data.get("text_template", "")
+                result["text"] = data.get("text_template", "")
+                return result
 
             # 其他格式，尝试提取文本内容
             if isinstance(data, dict):
                 # 查找可能的文本字段
                 for key in ["text", "message", "content", "body"]:
                     if key in data and isinstance(data[key], str):
-                        return data[key]
+                        result["text"] = data[key]
+                        break
+
+                # 查找可能的图片字段
+                for key in ["image", "image_url", "picture", "cover"]:
+                    if key in data and isinstance(data[key], str):
+                        result["image_url"] = data[key]
+                        break
 
                 # 如果没有找到文本字段，返回 JSON 字符串
-                import json
-                return json.dumps(data, ensure_ascii=False, indent=2)
+                if not result["text"]:
+                    import json
+                    result["text"] = json.dumps(data, ensure_ascii=False, indent=2)
+
+                return result
 
             # 如果是字符串，直接返回
             if isinstance(data, str):
-                return data
+                result["text"] = data
+                return result
 
             # 默认情况
-            return "来自 Ani-RSS 的通知"
+            result["text"] = "来自 Ani-RSS 的通知"
+            return result
 
         except Exception as e:
-            logger.error(f"生成 Ani-RSS 原始消息失败: {e}")
-            return "来自 Ani-RSS 的通知"
+            logger.error(f"提取 Ani-RSS 内容失败: {e}")
+            return {
+                "text": "来自 Ani-RSS 的通知",
+                "image_url": ""
+            }
+
+    def generate_ani_rss_raw_message(self, data: Dict) -> str:
+        """为 Ani-RSS 生成原始格式消息（仅返回文本部分）"""
+        content = self.extract_ani_rss_content(data)
+        return content["text"]
 
     def generate_title_by_type(self, item_type: str, cn_type: str, emoji: str, action: str, data: Dict) -> str:
         """根据媒体类型生成合适的标题"""
