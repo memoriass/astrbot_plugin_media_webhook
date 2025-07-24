@@ -490,6 +490,38 @@ class MediaWebhookPlugin(Star):
         # 智能发送逻辑：立即检查是否需要发送
         await self._check_and_send_messages()
 
+    async def _check_and_send_messages(self):
+        """检查并智能发送消息"""
+        try:
+            if not self.message_queue:
+                return
+
+            current_time = time.time()
+
+            # 检查是否有足够的消息进行批量发送
+            if len(self.message_queue) >= self.batch_min_size:
+                logger.info(f"消息数量达到批量阈值 {self.batch_min_size}，立即发送")
+                await self.process_message_queue()
+                return
+
+            # 检查是否超过了批量间隔时间
+            time_since_last_batch = current_time - self.last_batch_time
+            if time_since_last_batch >= self.batch_interval_seconds:
+                logger.info(f"超过批量间隔时间 {self.batch_interval_seconds}秒，发送队列中的消息")
+                await self.process_message_queue()
+                return
+
+            # 如果是单条消息且配置了立即发送，则立即发送
+            if len(self.message_queue) == 1 and self.force_individual_send:
+                logger.info("配置为立即发送单条消息")
+                await self.process_message_queue()
+                return
+
+            logger.debug(f"消息暂存队列，当前 {len(self.message_queue)} 条消息")
+
+        except Exception as e:
+            logger.error(f"检查和发送消息失败: {e}")
+
     def _save_failed_request(self, body_text: str, headers: Dict):
         """保存失败的请求到文件"""
         try:
@@ -1826,6 +1858,9 @@ class MediaWebhookPlugin(Star):
 
         except Exception as e:
             logger.error(f"发送消息时出错: {e}")
+        finally:
+            # 更新最后批量处理时间
+            self.last_batch_time = time.time()
 
     async def send_batch_messages(self, group_id: str, messages: List[Dict]):
         """发送批量合并转发消息（仅支持 aiocqhttp 等平台）- 优化配置获取"""

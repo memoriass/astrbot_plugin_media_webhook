@@ -31,6 +31,12 @@ Webhook URL: http://your-bot-server:60071/media-webhook
 /webhook status  # 查看状态
 ```
 
+## 使用说明
+
+1. 配置插件参数
+2. 在媒体服务器中设置 Webhook URL
+3. 插件会自动接收并推送通知到指定群组
+
 
 ## 消息示例
 
