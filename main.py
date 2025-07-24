@@ -283,15 +283,9 @@ class MediaWebhookPlugin(Star):
 
             # 处理不同来源的数据格式
             if source == "ani-rss":
-                if is_text_template:
-                    media_data = self.convert_ani_rss_text_template_to_media_data(body_text)
-                    logger.info("检测到 ani-rss 文本模板，已转换为标准格式")
-                elif self.is_ani_rss_message_format(raw_data):
-                    media_data = self.convert_ani_rss_message_to_media_data(raw_data)
-                    logger.info("检测到 ani-rss 消息格式，已转换为标准格式")
-                else:
-                    media_data = self.convert_ani_rss_to_media_data(raw_data)
-                    logger.info("检测到 ani-rss 配置格式数据，已转换为标准格式")
+                # Ani-RSS 消息保持原始格式，不进行数据转换或丰富
+                media_data = raw_data
+                logger.info("检测到 ani-rss 数据，保持原始格式直接发送")
             elif source == "emby":
                 media_data = self.convert_emby_to_media_data(raw_data)
                 logger.info("检测到 Emby 数据，已转换为标准格式")
@@ -1305,6 +1299,11 @@ class MediaWebhookPlugin(Star):
 
     def generate_message_text(self, data: Dict, source: str = "default") -> str:
         """生成消息文本"""
+
+        # 对于 Ani-RSS，直接使用原始数据格式
+        if source == "ani-rss":
+            return self.generate_ani_rss_raw_message(data)
+
         item_type = data.get("item_type", "")
         cn_type = self.media_type_map.get(item_type, item_type)
         emoji = self.type_emoji_map.get(item_type, self.type_emoji_map["Default"])
@@ -1338,6 +1337,49 @@ class MediaWebhookPlugin(Star):
         self.add_detail_sections(message_parts, data, item_type)
 
         return "\n\n".join(message_parts)
+
+    def generate_ani_rss_raw_message(self, data: Dict) -> str:
+        """为 Ani-RSS 生成原始格式消息"""
+        try:
+            # 检查是否为 Ani-RSS 真实消息格式
+            if "meassage" in data:
+                messages = data.get("meassage", [])
+                text_content = ""
+
+                for msg in messages:
+                    if isinstance(msg, dict) and msg.get("type") == "text":
+                        text_data = msg.get("data", {})
+                        text_content = text_data.get("text", "")
+                        break
+
+                if text_content:
+                    return text_content
+
+            # 检查是否为文本模板格式
+            if "text_template" in data:
+                return data.get("text_template", "")
+
+            # 其他格式，尝试提取文本内容
+            if isinstance(data, dict):
+                # 查找可能的文本字段
+                for key in ["text", "message", "content", "body"]:
+                    if key in data and isinstance(data[key], str):
+                        return data[key]
+
+                # 如果没有找到文本字段，返回 JSON 字符串
+                import json
+                return json.dumps(data, ensure_ascii=False, indent=2)
+
+            # 如果是字符串，直接返回
+            if isinstance(data, str):
+                return data
+
+            # 默认情况
+            return "来自 Ani-RSS 的通知"
+
+        except Exception as e:
+            logger.error(f"生成 Ani-RSS 原始消息失败: {e}")
+            return "来自 Ani-RSS 的通知"
 
     def generate_title_by_type(self, item_type: str, cn_type: str, emoji: str, action: str, data: Dict) -> str:
         """根据媒体类型生成合适的标题"""

@@ -104,7 +104,14 @@ http://your-bot-server:60071/media-webhook
 
 ## Ani-RSS 支持
 
-完整支持 Ani-RSS 项目，详见 [ANI_RSS_COMPATIBILITY.md](ANI_RSS_COMPATIBILITY.md)
+完整支持 Ani-RSS 项目，**采用原始数据格式直接发送**：
+
+- **原始格式**: 保持 Ani-RSS 的完整信息和原始格式
+- **无数据转换**: 不进行标准化处理，避免信息丢失
+- **无数据丰富**: 不使用 TMDB/BGM.TV 等外部 API
+- **用户体验**: 保持用户熟悉的 Ani-RSS 消息风格
+
+详见 [ANI_RSS_COMPATIBILITY.md](ANI_RSS_COMPATIBILITY.md)
 
 ## 许可证
 
