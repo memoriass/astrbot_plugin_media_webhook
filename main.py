@@ -364,8 +364,8 @@ class MediaWebhookPlugin(Star):
         for key in expired_keys:
             del self.request_cache[key]
 
-    def _add_to_queue(self, media_data: Dict, source: str):
-        """添加消息到队列"""
+    async def _add_to_queue(self, media_data: Dict, source: str):
+        """添加消息到队列并智能发送"""
 
         # 对于 Ani-RSS，需要特殊处理图片提取
         if source == "ani-rss":
@@ -388,6 +388,9 @@ class MediaWebhookPlugin(Star):
         source_name = self.source_map.get(source, source)
         item_type = media_data.get('item_type', 'Unknown') if source != "ani-rss" else "Ani-RSS"
         logger.info(f"新 {item_type} 通知已加入队列 [来源: {source_name}]")
+
+        # 智能发送逻辑：立即检查是否需要发送
+        await self._check_and_send_messages()
 
     def _save_failed_request(self, body_text: str, headers: Dict):
         """保存失败的请求到文件"""
@@ -1643,9 +1646,9 @@ class MediaWebhookPlugin(Star):
             platform_name = self.config.get("platform_name", "aiocqhttp")
             force_individual = self.config.get("force_individual_send", False)
 
-            # 智能发送逻辑
+            # 根据 aiocqhttp 文档优化的发送逻辑
             if len(messages) < batch_min_size:
-                # 消息数量不足，直接单独发送
+                # 低于 batch_min_size 阈值，使用单独发送（符合 aiocqhttp 文档建议）
                 logger.info(f"消息数量 {len(messages)} 低于批量发送阈值 {batch_min_size}，使用单独发送")
                 await self.send_individual_messages(group_id, messages)
             elif force_individual:
@@ -1653,8 +1656,8 @@ class MediaWebhookPlugin(Star):
                 logger.info(f"配置强制单独发送，将 {len(messages)} 条消息逐个发送")
                 await self.send_individual_messages(group_id, messages)
             elif self.supports_forward_messages(platform_name):
-                # 平台支持合并转发，使用合并发送
-                logger.info(f"平台 {platform_name} 支持合并转发，将 {len(messages)} 条消息合并发送")
+                # 达到或超过 batch_min_size 阈值，使用合并转发
+                logger.info(f"消息数量 {len(messages)} 达到阈值 {batch_min_size}，平台 {platform_name} 支持合并转发，使用合并发送")
                 await self.send_batch_messages(group_id, messages)
             else:
                 # 平台不支持合并转发，回退到单独发送
@@ -1668,9 +1671,17 @@ class MediaWebhookPlugin(Star):
         """发送批量合并转发消息（仅支持 aiocqhttp 等平台）"""
         logger.info(f"使用合并转发发送 {len(messages)} 条消息")
 
+        platform_name = self.config.get("platform_name", "aiocqhttp")
+
+        # 根据 aiocqhttp 文档，低于 batch_min_size 使用单独发送
+        batch_min_size = self.config.get("batch_min_size", 3)
+        if len(messages) < batch_min_size:
+            logger.info(f"消息数量 {len(messages)} 低于批量阈值 {batch_min_size}，改为单独发送")
+            await self.send_individual_messages(group_id, messages)
+            return
+
         # 构建合并转发节点
         forward_nodes = []
-        platform_name = self.config.get("platform_name", "aiocqhttp")
 
         for msg in messages:
             try:
@@ -1690,8 +1701,11 @@ class MediaWebhookPlugin(Star):
                 else:
                     content.append(Comp.Plain(message_text))
 
+                # 根据 AstrBot 文档，使用正确的 Node 格式
                 node = Comp.Node(
-                    content=content, uin="2659908767", name="媒体通知"  # 可以配置化
+                    uin="2659908767",  # 可以配置化
+                    name="媒体通知",
+                    content=content
                 )
                 forward_nodes.append(node)
 
@@ -1700,15 +1714,23 @@ class MediaWebhookPlugin(Star):
                 logger.error(f"消息内容: {msg}")
 
         if forward_nodes:
-            # 发送合并转发消息
-            unified_msg_origin = f"{platform_name}:GroupMessage:{group_id}"
-            logger.debug(f"发送合并转发消息，unified_msg_origin: {unified_msg_origin}")
-            message_chain = MessageChain(chain=forward_nodes)
-            await self.context.send_message(unified_msg_origin, message_chain)
+            try:
+                # 发送合并转发消息
+                unified_msg_origin = f"{platform_name}:GroupMessage:{group_id}"
+                logger.debug(f"发送合并转发消息，unified_msg_origin: {unified_msg_origin}")
 
-            logger.info(f"成功发送 {len(forward_nodes)} 条合并转发消息")
+                # 根据 AstrBot 文档，直接发送 Node 列表
+                message_chain = MessageChain(chain=forward_nodes)
+                await self.context.send_message(unified_msg_origin, message_chain)
+
+                logger.info(f"成功发送 {len(forward_nodes)} 条合并转发消息")
+            except Exception as e:
+                logger.error(f"发送合并转发消息失败: {e}")
+                logger.info("回退到单独发送模式")
+                await self.send_individual_messages(group_id, messages)
         else:
-            logger.warning("没有有效的转发节点，跳过发送")
+            logger.warning("没有有效的转发节点，改为单独发送")
+            await self.send_individual_messages(group_id, messages)
 
     async def send_individual_messages(self, group_id: str, messages: List[Dict]):
         """发送单独消息（适用于所有平台）"""

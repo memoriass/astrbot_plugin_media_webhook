@@ -65,6 +65,9 @@ http://your-bot-server:60071/media-webhook
 | `webhook_port` | Webhook 服务端口（默认：60071） |
 | `group_id` | 目标群组 ID（必填） |
 | `tmdb_api_key` | TMDB API 密钥（可选，用于数据丰富） |
+| `batch_min_size` | 批量发送阈值（默认：3） |
+| `platform_name` | 消息平台名称（默认：aiocqhttp） |
+| `force_individual_send` | 强制单独发送（默认：false） |
 
 
 插件支持为 **Jellyfin、Emby、Plex** 通过外部 API 获取更准确的剧集信息：
@@ -85,6 +88,7 @@ http://your-bot-server:60071/media-webhook
 - **格式保持**: 保持所有重要信息的完整性和可读性
 - **平台兼容**: 不影响 Ani-RSS 等其他平台的消息格式
 - **显著效果**: 消息行数减少 33-40%，大幅提高显示兼容性
+- **智能批量**: 根据 aiocqhttp 文档优化批量发送逻辑
 
 **修复效果对比**：
 ```
@@ -101,6 +105,11 @@ http://your-bot-server:60071/media-webhook
 时长: 24分钟
 ✨ 数据来源: TMDB
 ```
+
+**批量发送优化**：
+- 低于 `batch_min_size` (默认3): 单独发送，避免合并转发开销
+- 达到或超过 `batch_min_size`: 合并转发，减少刷屏
+- 根据平台能力智能选择发送方式
 
 ## Ani-RSS 支持
 
