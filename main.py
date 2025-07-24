@@ -1602,13 +1602,10 @@ class MediaWebhookPlugin(Star):
                 # 处理消息文本
                 message_text = msg["message_text"]
 
-                # 对于合并转发，也需要特殊处理多行消息
+                # 对于合并转发，也使用相同的文本处理
                 if platform_name.lower() == "aiocqhttp":
-                    # 将消息拆分为多个部分
-                    text_parts = self._split_message_for_aiocqhttp(message_text)
-                    for part in text_parts:
-                        if part.strip():
-                            content.append(Comp.Plain(part))
+                    processed_text = self._process_text_for_aiocqhttp(message_text)
+                    content.append(Comp.Plain(processed_text))
                 else:
                     content.append(Comp.Plain(message_text))
 
@@ -1651,13 +1648,11 @@ class MediaWebhookPlugin(Star):
                 # 处理消息文本，确保换行符正确处理
                 message_text = msg["message_text"]
 
-                # 对于 aiocqhttp，需要特殊处理多行消息
+                # 对于 aiocqhttp，使用特殊的换行符处理
                 if platform_name.lower() == "aiocqhttp":
-                    # 将消息拆分为多个部分，每个部分作为单独的 Plain 组件
-                    text_parts = self._split_message_for_aiocqhttp(message_text)
-                    for part in text_parts:
-                        if part.strip():  # 跳过空行
-                            content.append(Comp.Plain(part))
+                    # 尝试不同的换行符处理方式
+                    processed_text = self._process_text_for_aiocqhttp(message_text)
+                    content.append(Comp.Plain(processed_text))
                 else:
                     # 其他平台直接使用完整消息
                     content.append(Comp.Plain(message_text))
@@ -1674,8 +1669,27 @@ class MediaWebhookPlugin(Star):
 
         logger.info(f"成功逐个发送 {len(messages)} 条消息")
 
+    def _process_text_for_aiocqhttp(self, message_text: str) -> str:
+        """为 aiocqhttp 处理消息文本"""
+        # 基于测试结果，使用最佳的修复方案
+
+        # 首先标准化换行符
+        processed_text = message_text.replace('\r\n', '\n').replace('\r', '\n')
+
+        # 对于 Emby/Plex/Jellyfin 的消息，应用格式清理
+        if any(platform in message_text for platform in ['[Emby]', '[Plex]', '[Jellyfin]']):
+            # 方案3+5组合：移除双换行符并移除空行
+            lines = processed_text.split('\n')
+            # 移除空行，保持紧凑格式
+            non_empty_lines = [line for line in lines if line.strip()]
+            processed_text = '\n'.join(non_empty_lines)
+
+            logger.debug(f"aiocqhttp 消息处理: {len(lines)} 行 -> {len(non_empty_lines)} 行")
+
+        return processed_text
+
     def _split_message_for_aiocqhttp(self, message_text: str) -> List[str]:
-        """为 aiocqhttp 拆分消息文本"""
+        """为 aiocqhttp 拆分消息文本（备用方案）"""
         # 将消息按双换行符拆分为段落
         paragraphs = message_text.split('\n\n')
 
