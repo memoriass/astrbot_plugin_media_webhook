@@ -186,8 +186,8 @@ class MediaWebhookPlugin(Star):
         self.validate_config()
 
         # 启动HTTP服务器和定时任务
-        asyncio.create_task(self.start_webhook_server())
-        asyncio.create_task(self.start_batch_processor())
+        self.webhook_task = asyncio.create_task(self.start_webhook_server())
+        self.batch_processor_task = asyncio.create_task(self.start_batch_processor())
 
     def validate_config(self):
         """验证配置参数 - 优化配置验证逻辑"""
@@ -1806,13 +1806,19 @@ class MediaWebhookPlugin(Star):
 
     async def start_batch_processor(self):
         """启动批量处理任务"""
+        logger.info("启动批量处理任务")
         while True:
             try:
                 interval = self.config.get("batch_interval_seconds", 300)
                 await asyncio.sleep(interval)
                 await self.process_message_queue()
+            except asyncio.CancelledError:
+                logger.info("批量处理任务被取消")
+                break
             except Exception as e:
                 logger.error(f"批量处理任务出错: {e}")
+                # 出错后等待一段时间再继续，避免无限循环错误
+                await asyncio.sleep(10)
 
     async def process_message_queue(self):
         """处理消息队列 - 优化配置获取"""
@@ -2099,10 +2105,28 @@ class MediaWebhookPlugin(Star):
     async def terminate(self):
         """插件卸载时的清理工作"""
         try:
-            if self.site:
+            # 取消批量处理任务
+            if hasattr(self, 'batch_processor_task') and not self.batch_processor_task.done():
+                self.batch_processor_task.cancel()
+                try:
+                    await self.batch_processor_task
+                except asyncio.CancelledError:
+                    pass
+
+            # 取消 Webhook 任务
+            if hasattr(self, 'webhook_task') and not self.webhook_task.done():
+                self.webhook_task.cancel()
+                try:
+                    await self.webhook_task
+                except asyncio.CancelledError:
+                    pass
+
+            # 停止 HTTP 服务器
+            if hasattr(self, 'site') and self.site:
                 await self.site.stop()
-            if self.runner:
+            if hasattr(self, 'runner') and self.runner:
                 await self.runner.cleanup()
+
             logger.info("Media Webhook 服务已停止")
         except Exception as e:
             logger.error(f"停止 Webhook 服务时出错: {e}")
