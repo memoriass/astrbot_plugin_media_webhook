@@ -96,19 +96,26 @@ class MediaWebhookPlugin(Star):
         self._init_cache_and_queue()
 
     def _init_core_config(self):
-        """初始化核心配置"""
-        self.webhook_port = self.config.get("webhook_port", 60071)
-        self.webhook_path = self.config.get("webhook_path", "/media-webhook")
-        self.group_id = self.config.get("group_id", "")
-        self.platform_name = self.config.get("platform_name", "aiocqhttp")
+        """初始化核心配置 - 优化配置获取性能"""
+        # 一次性获取所有配置，避免重复调用 config.get()
+        config = self.config
+        self.webhook_port = config.get("webhook_port", 60071)
+        self.webhook_path = config.get("webhook_path", "/media-webhook")
+        self.group_id = config.get("group_id", "")
+        self.platform_name = config.get("platform_name", "aiocqhttp")
 
         # 批量处理配置
-        self.batch_min_size = self.config.get("batch_min_size", 3)
-        self.batch_interval_seconds = self.config.get("batch_interval_seconds", 300)
-        self.cache_ttl_seconds = self.config.get("cache_ttl_seconds", 300)
+        self.batch_min_size = config.get("batch_min_size", 3)
+        self.batch_interval_seconds = config.get("batch_interval_seconds", 300)
+        self.cache_ttl_seconds = config.get("cache_ttl_seconds", 300)
+        self.force_individual_send = config.get("force_individual_send", False)
+
+        # 显示配置
+        self.show_platform_prefix = config.get("show_platform_prefix", True)
+        self.show_source_info = config.get("show_source_info", True)
 
         # API 配置
-        self.tmdb_api_key = self.config.get("tmdb_api_key", "")
+        self.tmdb_api_key = config.get("tmdb_api_key", "")
         self.tmdb_base_url = "https://api.themoviedb.org/3"
         self.bgm_base_url = "https://api.bgm.tv"
 
@@ -120,8 +127,17 @@ class MediaWebhookPlugin(Star):
         self.bgm_cache: Dict[str, Dict] = {}
         self.last_batch_time = time.time()
 
+        # 配置缓存，避免重复调用 config.get()
+        self._config_cache: Dict[str, any] = {}
+
         # 映射表
         self._init_mappings()
+
+    def _get_config(self, key: str, default=None):
+        """获取配置值，带缓存优化"""
+        if key not in self._config_cache:
+            self._config_cache[key] = self.config.get(key, default)
+        return self._config_cache[key]
 
     def _init_mappings(self):
         """初始化映射表"""
@@ -174,49 +190,52 @@ class MediaWebhookPlugin(Star):
         asyncio.create_task(self.start_batch_processor())
 
     def validate_config(self):
-        """验证配置参数"""
-        port = self.config.get("webhook_port", 60071)
-        if not isinstance(port, int) or port < 1 or port > 65535:
-            logger.warning(f"无效的端口号: {port}，使用默认端口 60071")
-            self.config["webhook_port"] = 60071
+        """验证配置参数 - 优化配置验证逻辑"""
+        # 配置验证规则
+        validation_rules = [
+            ("webhook_port", 60071, lambda x: isinstance(x, int) and 1 <= x <= 65535, "无效的端口号"),
+            ("batch_interval_seconds", 300, lambda x: isinstance(x, int) and x >= 10, "批量处理间隔过短", 10),
+            ("cache_ttl_seconds", 300, lambda x: isinstance(x, int) and x >= 60, "缓存TTL过短", 60),
+            ("batch_min_size", 3, lambda x: isinstance(x, int) and x >= 1, "批量发送阈值无效", 1),
+        ]
 
-        batch_interval = self.config.get("batch_interval_seconds", 300)
-        if not isinstance(batch_interval, int) or batch_interval < 10:
-            logger.warning(f"批量处理间隔过短: {batch_interval}秒，设置为最小值 10秒")
-            self.config["batch_interval_seconds"] = max(10, batch_interval)
+        for rule in validation_rules:
+            key, default, validator, error_msg = rule[:4]
+            min_value = rule[4] if len(rule) > 4 else default
 
-        cache_ttl = self.config.get("cache_ttl_seconds", 300)
-        if not isinstance(cache_ttl, int) or cache_ttl < 60:
-            logger.warning(f"缓存TTL过短: {cache_ttl}秒，设置为最小值 60秒")
-            self.config["cache_ttl_seconds"] = max(60, cache_ttl)
+            value = self.config.get(key, default)
+            if not validator(value):
+                logger.warning(f"{error_msg}: {value}，设置为 {min_value}")
+                self.config[key] = min_value
+                # 清除缓存中的旧值
+                self._config_cache.pop(key, None)
 
     async def start_webhook_server(self):
         """启动HTTP Webhook服务器"""
         try:
             self.app = web.Application()
             self.app.router.add_post(
-                self.config.get("webhook_path", "/media-webhook"), self.handle_webhook
+                self.webhook_path, self.handle_webhook
             )
 
             self.runner = web.AppRunner(self.app)
             await self.runner.setup()
 
-            port = self.config.get("webhook_port", 60071)
-            self.site = web.TCPSite(self.runner, "0.0.0.0", port)
+            self.site = web.TCPSite(self.runner, "0.0.0.0", self.webhook_port)
             await self.site.start()
 
-            logger.info(f"Media Webhook 服务已启动，监听端口: {port}")
+            logger.info(f"Media Webhook 服务已启动，监听端口: {self.webhook_port}")
             logger.info(
-                f"访问地址: http://localhost:{port}{self.config.get('webhook_path', '/media-webhook')}"
+                f"访问地址: http://localhost:{self.webhook_port}{self.webhook_path}"
             )
 
         except OSError as e:
-            if "Address already in use" in str(e) or "Only one usage" in str(e):
-                logger.error(
-                    f"端口 {self.config.get('webhook_port', 60071)} 已被占用，请更换端口"
-                )
-            else:
-                logger.error(f"网络错误: {e}")
+            error_msg = (
+                f"端口 {self.webhook_port} 已被占用，请更换端口"
+                if "Address already in use" in str(e) or "Only one usage" in str(e)
+                else f"网络错误: {e}"
+            )
+            logger.error(error_msg)
         except Exception as e:
             logger.error(f"启动 Webhook 服务器失败: {e}")
 
@@ -319,7 +338,7 @@ class MediaWebhookPlugin(Star):
             return Response(text="处理消息时发生内部错误", status=500)
 
     def _is_duplicate_request(self, media_data: Dict) -> bool:
-        """检查是否为重复请求"""
+        """检查是否为重复请求 - 使用哈希校验，排除图片以保持更高准确率"""
         request_hash = self._calculate_request_hash(media_data)
         if not request_hash:
             return False
@@ -331,29 +350,96 @@ class MediaWebhookPlugin(Star):
 
         # 检查是否重复
         if request_hash in self.request_cache:
+            cached_time = self.request_cache[request_hash]
+            logger.debug(f"检测到重复请求，哈希: {request_hash[:8]}..., 缓存时间: {cached_time}")
             return True
 
         # 缓存新请求
         cache_ttl = self.cache_ttl_seconds
         self.request_cache[request_hash] = current_time + cache_ttl
+        logger.debug(f"缓存新请求，哈希: {request_hash[:8]}..., 过期时间: {current_time + cache_ttl}")
         return False
 
     def _calculate_request_hash(self, media_data: Dict) -> Optional[str]:
-        """计算请求哈希值"""
+        """计算请求哈希值 - 排除图片和不稳定字段以提高准确率"""
         try:
-            # 创建用于哈希的数据，排除不稳定字段
-            hash_data = {
-                "series_name": media_data.get("series_name", ""),
-                "item_name": media_data.get("item_name", ""),
-                "season_number": media_data.get("season_number", ""),
-                "episode_number": media_data.get("episode_number", ""),
-                "item_type": media_data.get("item_type", ""),
-            }
-            hash_string = json.dumps(hash_data, sort_keys=True)
-            return hashlib.md5(hash_string.encode()).hexdigest()
+            # 根据数据来源选择不同的哈希策略
+            if self._is_ani_rss_data(media_data):
+                return self._calculate_ani_rss_hash(media_data)
+            else:
+                return self._calculate_standard_hash(media_data)
         except Exception as e:
             logger.error(f"计算请求哈希失败: {e}")
             return None
+
+    def _is_ani_rss_data(self, media_data: Dict) -> bool:
+        """判断是否为 Ani-RSS 数据"""
+        return "meassage" in media_data or "text_template" in media_data
+
+    def _calculate_ani_rss_hash(self, media_data: Dict) -> str:
+        """计算 Ani-RSS 数据的哈希值"""
+        # 对于 Ani-RSS，提取关键信息进行哈希
+        if "meassage" in media_data:
+            messages = media_data.get("meassage", [])
+            text_content = ""
+            for msg in messages:
+                if isinstance(msg, dict) and msg.get("type") == "text":
+                    text_data = msg.get("data", {})
+                    text_content = text_data.get("text", "")
+                    break
+
+            # 从文本中提取关键信息
+            hash_data = {
+                "content_hash": hashlib.md5(text_content.encode()).hexdigest()[:16],
+                "data_type": "ani_rss_message"
+            }
+        elif "text_template" in media_data:
+            template = media_data.get("text_template", "")
+            hash_data = {
+                "content_hash": hashlib.md5(template.encode()).hexdigest()[:16],
+                "data_type": "ani_rss_template"
+            }
+        else:
+            # 其他 Ani-RSS 格式
+            content_str = json.dumps(media_data, sort_keys=True)
+            hash_data = {
+                "content_hash": hashlib.md5(content_str.encode()).hexdigest()[:16],
+                "data_type": "ani_rss_other"
+            }
+
+        hash_string = json.dumps(hash_data, sort_keys=True)
+        return hashlib.sha256(hash_string.encode()).hexdigest()
+
+    def _calculate_standard_hash(self, media_data: Dict) -> str:
+        """计算标准媒体数据的哈希值 - 排除图片和时间戳等不稳定字段"""
+        # 提取核心标识字段，排除图片URL、时间戳等不稳定字段
+        hash_data = {
+            "series_name": media_data.get("series_name", "").strip(),
+            "item_name": media_data.get("item_name", "").strip(),
+            "season_number": str(media_data.get("season_number", "")).strip(),
+            "episode_number": str(media_data.get("episode_number", "")).strip(),
+            "item_type": media_data.get("item_type", "").strip(),
+            "year": str(media_data.get("year", "")).strip(),
+        }
+
+        # 移除空值以提高匹配准确率
+        hash_data = {k: v for k, v in hash_data.items() if v}
+
+        # 如果关键字段都为空，使用原始数据的部分内容
+        if not hash_data:
+            # 排除图片URL和时间戳等字段
+            excluded_fields = {
+                "image_url", "timestamp", "raw_message", "headers",
+                "request_time", "processed_time", "cache_time"
+            }
+            filtered_data = {
+                k: v for k, v in media_data.items()
+                if k not in excluded_fields and not k.endswith("_url")
+            }
+            hash_data = {"fallback_content": str(filtered_data)}
+
+        hash_string = json.dumps(hash_data, sort_keys=True, ensure_ascii=False)
+        return hashlib.sha256(hash_string.encode()).hexdigest()
 
     def _cleanup_expired_cache(self, current_time: float):
         """清理过期缓存"""
@@ -361,8 +447,10 @@ class MediaWebhookPlugin(Star):
             key for key, expire_time in self.request_cache.items()
             if expire_time < current_time
         ]
-        for key in expired_keys:
-            del self.request_cache[key]
+        if expired_keys:
+            logger.debug(f"清理 {len(expired_keys)} 个过期缓存项")
+            for key in expired_keys:
+                del self.request_cache[key]
 
     async def _add_to_queue(self, media_data: Dict, source: str):
         """添加消息到队列并智能发送"""
@@ -1623,17 +1711,16 @@ class MediaWebhookPlugin(Star):
                 logger.error(f"批量处理任务出错: {e}")
 
     async def process_message_queue(self):
-        """处理消息队列"""
+        """处理消息队列 - 优化配置获取"""
         if not self.message_queue:
             return
 
-        group_id = self.config.get("group_id", "")
-        if not group_id:
+        if not self.group_id:
             logger.warning("未配置群组ID，无法发送消息")
             return
 
         # 清理 group_id，移除可能的冒号
-        group_id = str(group_id).replace(":", "_")
+        group_id = str(self.group_id).replace(":", "_")
         logger.debug(f"使用群组ID: {group_id}")
 
         messages = self.message_queue.copy()
@@ -1642,9 +1729,10 @@ class MediaWebhookPlugin(Star):
         logger.info(f"从队列中取出 {len(messages)} 条待发消息")
 
         try:
-            batch_min_size = self.config.get("batch_min_size", 3)
-            platform_name = self.config.get("platform_name", "aiocqhttp")
-            force_individual = self.config.get("force_individual_send", False)
+            # 使用缓存的配置值
+            batch_min_size = self.batch_min_size
+            platform_name = self.platform_name
+            force_individual = self.force_individual_send
 
             # 根据 aiocqhttp 文档优化的发送逻辑
             if len(messages) < batch_min_size:
@@ -1668,15 +1756,12 @@ class MediaWebhookPlugin(Star):
             logger.error(f"发送消息时出错: {e}")
 
     async def send_batch_messages(self, group_id: str, messages: List[Dict]):
-        """发送批量合并转发消息（仅支持 aiocqhttp 等平台）"""
+        """发送批量合并转发消息（仅支持 aiocqhttp 等平台）- 优化配置获取"""
         logger.info(f"使用合并转发发送 {len(messages)} 条消息")
 
-        platform_name = self.config.get("platform_name", "aiocqhttp")
-
         # 根据 aiocqhttp 文档，低于 batch_min_size 使用单独发送
-        batch_min_size = self.config.get("batch_min_size", 3)
-        if len(messages) < batch_min_size:
-            logger.info(f"消息数量 {len(messages)} 低于批量阈值 {batch_min_size}，改为单独发送")
+        if len(messages) < self.batch_min_size:
+            logger.info(f"消息数量 {len(messages)} 低于批量阈值 {self.batch_min_size}，改为单独发送")
             await self.send_individual_messages(group_id, messages)
             return
 
@@ -1695,7 +1780,7 @@ class MediaWebhookPlugin(Star):
                 message_text = msg["message_text"]
 
                 # 对于合并转发，也使用相同的文本处理
-                if platform_name.lower() == "aiocqhttp":
+                if self.platform_name.lower() == "aiocqhttp":
                     processed_text = self._process_text_for_aiocqhttp(message_text)
                     content.append(Comp.Plain(processed_text))
                 else:
@@ -1716,7 +1801,7 @@ class MediaWebhookPlugin(Star):
         if forward_nodes:
             try:
                 # 发送合并转发消息
-                unified_msg_origin = f"{platform_name}:GroupMessage:{group_id}"
+                unified_msg_origin = f"{self.platform_name}:GroupMessage:{group_id}"
                 logger.debug(f"发送合并转发消息，unified_msg_origin: {unified_msg_origin}")
 
                 # 根据 AstrBot 文档，直接发送 Node 列表
@@ -1736,9 +1821,11 @@ class MediaWebhookPlugin(Star):
         """发送单独消息（适用于所有平台）"""
         logger.info(f"逐个发送 {len(messages)} 条消息")
 
-        platform_name = self.config.get("platform_name", "aiocqhttp")
-        unified_msg_origin = f"{platform_name}:GroupMessage:{group_id}"
+        unified_msg_origin = f"{self.platform_name}:GroupMessage:{group_id}"
         logger.debug(f"发送单独消息，unified_msg_origin: {unified_msg_origin}")
+
+        # 预计算是否为 aiocqhttp 平台，避免重复判断
+        is_aiocqhttp = self.platform_name.lower() == "aiocqhttp"
 
         for msg in messages:
             try:
@@ -1752,7 +1839,7 @@ class MediaWebhookPlugin(Star):
                 message_text = msg["message_text"]
 
                 # 对于 aiocqhttp，使用特殊的换行符处理
-                if platform_name.lower() == "aiocqhttp":
+                if is_aiocqhttp:
                     # 尝试不同的换行符处理方式
                     processed_text = self._process_text_for_aiocqhttp(message_text)
                     content.append(Comp.Plain(processed_text))
