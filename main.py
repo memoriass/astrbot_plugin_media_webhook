@@ -1589,25 +1589,48 @@ class MediaWebhookPlugin(Star):
 
         # 构建合并转发节点
         forward_nodes = []
-        for msg in messages:
-            content = []
-            if msg.get("image_url"):
-                content.append(Comp.Image.fromURL(msg["image_url"]))
-            content.append(Comp.Plain(msg["message_text"]))
-
-            node = Comp.Node(
-                content=content, uin="2659908767", name="媒体通知"  # 可以配置化
-            )
-            forward_nodes.append(node)
-
-        # 发送合并转发消息
         platform_name = self.config.get("platform_name", "aiocqhttp")
-        unified_msg_origin = f"{platform_name}:GroupMessage:{group_id}"
-        logger.debug(f"发送合并转发消息，unified_msg_origin: {unified_msg_origin}")
-        message_chain = MessageChain(chain=forward_nodes)
-        await self.context.send_message(unified_msg_origin, message_chain)
 
-        logger.info(f"成功发送 {len(messages)} 条合并转发消息")
+        for msg in messages:
+            try:
+                content = []
+
+                # 添加图片（如果有）
+                if msg.get("image_url"):
+                    content.append(Comp.Image.fromURL(msg["image_url"]))
+
+                # 处理消息文本
+                message_text = msg["message_text"]
+
+                # 对于合并转发，也需要特殊处理多行消息
+                if platform_name.lower() == "aiocqhttp":
+                    # 将消息拆分为多个部分
+                    text_parts = self._split_message_for_aiocqhttp(message_text)
+                    for part in text_parts:
+                        if part.strip():
+                            content.append(Comp.Plain(part))
+                else:
+                    content.append(Comp.Plain(message_text))
+
+                node = Comp.Node(
+                    content=content, uin="2659908767", name="媒体通知"  # 可以配置化
+                )
+                forward_nodes.append(node)
+
+            except Exception as e:
+                logger.error(f"构建转发节点失败: {e}")
+                logger.error(f"消息内容: {msg}")
+
+        if forward_nodes:
+            # 发送合并转发消息
+            unified_msg_origin = f"{platform_name}:GroupMessage:{group_id}"
+            logger.debug(f"发送合并转发消息，unified_msg_origin: {unified_msg_origin}")
+            message_chain = MessageChain(chain=forward_nodes)
+            await self.context.send_message(unified_msg_origin, message_chain)
+
+            logger.info(f"成功发送 {len(forward_nodes)} 条合并转发消息")
+        else:
+            logger.warning("没有有效的转发节点，跳过发送")
 
     async def send_individual_messages(self, group_id: str, messages: List[Dict]):
         """发送单独消息（适用于所有平台）"""
@@ -1618,15 +1641,51 @@ class MediaWebhookPlugin(Star):
         logger.debug(f"发送单独消息，unified_msg_origin: {unified_msg_origin}")
 
         for msg in messages:
-            content = []
-            if msg.get("image_url"):
-                content.append(Comp.Image.fromURL(msg["image_url"]))
-            content.append(Comp.Plain(msg["message_text"]))
+            try:
+                content = []
 
-            message_chain = MessageChain(chain=content)
-            await self.context.send_message(unified_msg_origin, message_chain)
+                # 添加图片（如果有）
+                if msg.get("image_url"):
+                    content.append(Comp.Image.fromURL(msg["image_url"]))
+
+                # 处理消息文本，确保换行符正确处理
+                message_text = msg["message_text"]
+
+                # 对于 aiocqhttp，需要特殊处理多行消息
+                if platform_name.lower() == "aiocqhttp":
+                    # 将消息拆分为多个部分，每个部分作为单独的 Plain 组件
+                    text_parts = self._split_message_for_aiocqhttp(message_text)
+                    for part in text_parts:
+                        if part.strip():  # 跳过空行
+                            content.append(Comp.Plain(part))
+                else:
+                    # 其他平台直接使用完整消息
+                    content.append(Comp.Plain(message_text))
+
+                message_chain = MessageChain(chain=content)
+                await self.context.send_message(unified_msg_origin, message_chain)
+
+                # 添加短暂延迟，避免消息发送过快
+                await asyncio.sleep(0.1)
+
+            except Exception as e:
+                logger.error(f"发送单条消息失败: {e}")
+                logger.error(f"消息内容: {msg}")
 
         logger.info(f"成功逐个发送 {len(messages)} 条消息")
+
+    def _split_message_for_aiocqhttp(self, message_text: str) -> List[str]:
+        """为 aiocqhttp 拆分消息文本"""
+        # 将消息按双换行符拆分为段落
+        paragraphs = message_text.split('\n\n')
+
+        result = []
+        for paragraph in paragraphs:
+            if paragraph.strip():
+                # 保持段落内的单换行符
+                result.append(paragraph.strip())
+
+        return result
 
     @filter.command("webhook status")
     async def webhook_status(self, event: AstrMessageEvent):
