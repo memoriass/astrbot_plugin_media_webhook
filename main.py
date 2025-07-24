@@ -453,7 +453,7 @@ class MediaWebhookPlugin(Star):
                 del self.request_cache[key]
 
     async def _add_to_queue(self, media_data: Dict, source: str):
-        """添加消息到队列并智能发送"""
+        """添加消息到队列并智能发送 - 支持图片降级获取"""
 
         # 对于 Ani-RSS，需要特殊处理图片提取
         if source == "ani-rss":
@@ -463,6 +463,16 @@ class MediaWebhookPlugin(Star):
         else:
             image_url = media_data.get("image_url", "")
             message_text = self.generate_message_text(media_data, source)
+
+            # 如果没有图片，尝试获取降级图片
+            if not image_url:
+                logger.info("通知没有图片，尝试获取降级图片...")
+                fallback_image = await self.get_fallback_image(media_data)
+                if fallback_image:
+                    image_url = fallback_image
+                    logger.info("成功获取降级图片")
+                else:
+                    logger.info("降级图片获取失败，将不发送图片")
 
         message_payload = {
             "image_url": image_url,
@@ -475,7 +485,7 @@ class MediaWebhookPlugin(Star):
 
         source_name = self.source_map.get(source, source)
         item_type = media_data.get('item_type', 'Unknown') if source != "ani-rss" else "Ani-RSS"
-        logger.info(f"新 {item_type} 通知已加入队列 [来源: {source_name}]")
+        logger.info(f"新 {item_type} 通知已加入队列 [来源: {source_name}] {'(含图片)' if image_url else '(无图片)'}")
 
         # 智能发送逻辑：立即检查是否需要发送
         await self._check_and_send_messages()
@@ -1066,13 +1076,75 @@ class MediaWebhookPlugin(Star):
             else:
                 logger.info("BGM.TV 数据获取失败")
 
-            # 第三步：返回原始数据
+            # 第三步：尝试补全图片（如果没有图片）
+            if not media_data.get("image_url"):
+                logger.info("尝试补全图片信息...")
+                image_url = await self.get_fallback_image(media_data)
+                if image_url:
+                    media_data["image_url"] = image_url
+                    logger.info("成功获取降级图片")
+
+            # 第四步：返回原始数据
             logger.info("所有外部 API 获取失败，使用原始数据")
             return media_data
 
         except Exception as e:
             logger.error(f"数据丰富流程失败: {e}")
             return media_data
+
+    async def get_fallback_image(self, media_data: Dict) -> str:
+        """获取降级图片 - TMDB → BGM.TV → 无图片"""
+        try:
+            series_name = media_data.get("series_name", "")
+            if not series_name:
+                return ""
+
+            # 尝试从 TMDB 获取图片
+            if self.tmdb_api_key:
+                logger.info("尝试从 TMDB 获取图片...")
+                image_url = await self.get_tmdb_image(series_name)
+                if image_url:
+                    logger.info("TMDB 图片获取成功")
+                    return image_url
+
+            # 尝试从 BGM.TV 获取图片
+            logger.info("尝试从 BGM.TV 获取图片...")
+            image_url = await self.get_bgm_image(series_name)
+            if image_url:
+                logger.info("BGM.TV 图片获取成功")
+                return image_url
+
+            logger.info("所有图片源获取失败")
+            return ""
+
+        except Exception as e:
+            logger.error(f"获取降级图片失败: {e}")
+            return ""
+
+    async def get_tmdb_image(self, series_name: str) -> str:
+        """从 TMDB 获取图片"""
+        try:
+            tv_show = await self.search_tmdb_tv_show(series_name)
+            if tv_show and tv_show.get("poster_path"):
+                poster_path = tv_show["poster_path"]
+                return f"https://image.tmdb.org/t/p/w500{poster_path}"
+            return ""
+        except Exception as e:
+            logger.error(f"TMDB 图片获取失败: {e}")
+            return ""
+
+    async def get_bgm_image(self, series_name: str) -> str:
+        """从 BGM.TV 获取图片"""
+        try:
+            subject = await self.search_bgm_tv_show(series_name)
+            if subject and subject.get("images"):
+                images = subject["images"]
+                # 优先使用大图
+                return images.get("large", images.get("medium", images.get("small", "")))
+            return ""
+        except Exception as e:
+            logger.error(f"BGM.TV 图片获取失败: {e}")
+            return ""
 
     async def try_tmdb_enrichment(self, media_data: Dict) -> Dict:
         """尝试使用 TMDB 丰富数据"""
