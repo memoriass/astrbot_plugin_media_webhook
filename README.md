@@ -2,15 +2,6 @@
 
 用于 AstrBot 的媒体通知 Webhook 插件，支持接收来自各种媒体服务器的通知。
 
-## 主要功能
-
-- 🎬 **多平台支持**: Jellyfin、Emby、Plex、Ani-RSS 等
-- 📱 **智能消息**: 自动格式化，包含剧集信息、封面图片
-- 🔄 **防重复**: 智能去重，避免重复通知
-- 🎯 **数据丰富**: TMDB → BGM.TV → 原始数据的降级机制
-- 🔧 **消息修复**: 针对 aiocqhttp 的多行消息显示优化
-
-
 ## 快速配置
 
 ### 1. 插件配置
@@ -34,13 +25,6 @@ http://your-bot-server:60071/media-webhook
 /webhook status      # 查看状态
 ```
 
-## 支持的服务器
-
-- **Jellyfin** - 完全支持，TMDB/BGM.TV 数据丰富
-- **Emby** - 完全支持，TMDB/BGM.TV 数据丰富
-- **Plex** - 完全支持，TMDB/BGM.TV 数据丰富
-- **Ani-RSS** - 完全支持，JSON 修复
-- **Sonarr/Radarr** - 完全支持
 
 ## 消息效果
 
@@ -66,7 +50,6 @@ http://your-bot-server:60071/media-webhook
 | `group_id` | 目标群组 ID（必填） |
 | `tmdb_api_key` | TMDB API 密钥（可选，用于数据丰富） |
 
-## 数据丰富功能
 
 插件支持为 **Jellyfin、Emby、Plex** 通过外部 API 获取更准确的剧集信息：
 
@@ -78,17 +61,6 @@ http://your-bot-server:60071/media-webhook
 
 **支持平台**：Jellyfin、Emby、Plex 的剧集通知都会自动进行数据丰富处理。
 
-## 消息修复
-
-针对 aiocqhttp 平台的多行消息显示问题进行了专门优化：
-
-- **消息拆分**: 将长消息按段落拆分为多个 Plain 组件
-- **格式保持**: 保持段落内的换行符和格式
-- **发送优化**: 添加发送延迟，避免消息过快导致的问题
-- **错误处理**: 完善的异常处理，确保消息发送可靠性
-
-修复前：消息只显示第一行，后续内容被截断
-修复后：完整显示所有消息内容，保持良好的可读性
 
 ## Ani-RSS 支持
 
