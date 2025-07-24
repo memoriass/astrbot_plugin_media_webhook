@@ -58,5 +58,11 @@
     "type": "bool",
     "hint": "是否在消息中显示通知来源信息（如Jellyfin、Emby等）",
     "default": true
+  },
+  "tmdb_api_key": {
+    "description": "TMDB API Key",
+    "type": "string",
+    "hint": "用于获取剧集详细信息的 TMDB API 密钥，支持 Jellyfin/Emby/Plex 数据丰富，留空则跳过 TMDB 查询",
+    "default": ""
   }
 }
