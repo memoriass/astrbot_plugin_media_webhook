@@ -1809,9 +1809,23 @@ class MediaWebhookPlugin(Star):
         logger.info("启动批量处理任务")
         while True:
             try:
-                interval = self.config.get("batch_interval_seconds", 300)
-                await asyncio.sleep(interval)
-                await self.process_message_queue()
+                # 使用较短的检查间隔，而不是等待整个批量间隔
+                check_interval = 10  # 每10秒检查一次
+                await asyncio.sleep(check_interval)
+
+                # 检查是否需要发送消息
+                if self.message_queue:
+                    current_time = time.time()
+                    time_since_last_batch = current_time - self.last_batch_time
+                    batch_interval = self.config.get("batch_interval_seconds", 300)
+
+                    if time_since_last_batch >= batch_interval:
+                        logger.info(f"批量处理器触发：超过间隔时间 {batch_interval}秒")
+                        await self.process_message_queue()
+                    else:
+                        remaining_time = batch_interval - time_since_last_batch
+                        logger.debug(f"批量处理器检查：队列有 {len(self.message_queue)} 条消息，剩余 {remaining_time:.1f}秒")
+
             except asyncio.CancelledError:
                 logger.info("批量处理任务被取消")
                 break
