@@ -187,7 +187,7 @@ class MediaWebhookPlugin(Star):
 
         # 启动HTTP服务器和定时任务
         self.webhook_task = asyncio.create_task(self.start_webhook_server())
-        self.batch_processor_task = asyncio.create_task(self.start_batch_processor())
+        self.cache_processor_task = asyncio.create_task(self.start_cache_processor())
 
     def validate_config(self):
         """验证配置参数 - 优化配置验证逻辑"""
@@ -488,39 +488,231 @@ class MediaWebhookPlugin(Star):
         logger.info(f"新 {item_type} 通知已加入队列 [来源: {source_name}] {'(含图片)' if image_url else '(无图片)'}")
 
         # 智能发送逻辑：立即检查是否需要发送
-        await self._check_and_send_messages()
+        await self._smart_send_check()
 
-    async def _check_and_send_messages(self):
-        """检查并智能发送消息"""
+    # ==================== 智能发送缓存机制 ====================
+
+    async def _smart_send_check(self):
+        """智能发送检查 - 根据协议端和配置决定发送策略"""
         try:
             if not self.message_queue:
                 return
 
-            current_time = time.time()
+            # 获取当前协议端信息
+            protocol_info = self._detect_protocol()
+            queue_size = len(self.message_queue)
 
-            # 检查是否有足够的消息进行批量发送
-            if len(self.message_queue) >= self.batch_min_size:
-                logger.info(f"消息数量达到批量阈值 {self.batch_min_size}，立即发送")
-                await self.process_message_queue()
-                return
+            logger.debug(f"智能发送检查: 协议={protocol_info['name']}, 队列={queue_size}条, 阈值={self.batch_min_size}")
 
-            # 检查是否超过了批量间隔时间
-            time_since_last_batch = current_time - self.last_batch_time
-            if time_since_last_batch >= self.batch_interval_seconds:
-                logger.info(f"超过批量间隔时间 {self.batch_interval_seconds}秒，发送队列中的消息")
-                await self.process_message_queue()
-                return
+            # 根据协议端能力和队列大小决定发送策略
+            should_send, send_strategy = self._determine_send_strategy(protocol_info, queue_size)
 
-            # 如果是单条消息且配置了立即发送，则立即发送
-            if len(self.message_queue) == 1 and self.force_individual_send:
-                logger.info("配置为立即发送单条消息")
-                await self.process_message_queue()
-                return
-
-            logger.debug(f"消息暂存队列，当前 {len(self.message_queue)} 条消息")
+            if should_send:
+                logger.info(f"触发发送: 策略={send_strategy}, 协议={protocol_info['name']}")
+                await self._execute_send_strategy(send_strategy, protocol_info)
+            else:
+                remaining_time = self._get_remaining_cache_time()
+                logger.debug(f"消息缓存中: {queue_size}条消息, {remaining_time:.1f}秒后超时")
 
         except Exception as e:
-            logger.error(f"检查和发送消息失败: {e}")
+            logger.error(f"智能发送检查失败: {e}")
+
+    def _detect_protocol(self) -> Dict:
+        """检测当前协议端类型和能力"""
+        platform_name = self.platform_name.lower()
+
+        # 协议端能力映射
+        protocol_capabilities = {
+            "aiocqhttp": {
+                "name": "aiocqhttp",
+                "supports_forward": True,
+                "supports_image": True,
+                "max_batch_size": 10,
+                "prefer_batch": True
+            },
+            "qqofficial": {
+                "name": "qqofficial",
+                "supports_forward": False,
+                "supports_image": True,
+                "max_batch_size": 1,
+                "prefer_batch": False
+            },
+            "telegram": {
+                "name": "telegram",
+                "supports_forward": False,
+                "supports_image": True,
+                "max_batch_size": 1,
+                "prefer_batch": False
+            },
+            "gewechat": {
+                "name": "gewechat",
+                "supports_forward": False,
+                "supports_image": True,
+                "max_batch_size": 1,
+                "prefer_batch": False
+            }
+        }
+
+        return protocol_capabilities.get(platform_name, {
+            "name": platform_name,
+            "supports_forward": False,
+            "supports_image": True,
+            "max_batch_size": 1,
+            "prefer_batch": False
+        })
+
+    def _determine_send_strategy(self, protocol_info: Dict, queue_size: int) -> tuple:
+        """确定发送策略"""
+        # 检查是否达到批量阈值
+        if queue_size >= self.batch_min_size:
+            if protocol_info["supports_forward"] and protocol_info["prefer_batch"]:
+                return True, "batch_forward"
+            else:
+                return True, "individual_burst"
+
+        # 检查是否超过缓存时间
+        if self._is_cache_timeout():
+            return True, "timeout_send"
+
+        # 检查是否强制立即发送
+        if self.force_individual_send and queue_size > 0:
+            return True, "force_individual"
+
+        return False, "cache_wait"
+
+    def _is_cache_timeout(self) -> bool:
+        """检查是否超过缓存时间"""
+        current_time = time.time()
+        time_since_last = current_time - self.last_batch_time
+        return time_since_last >= self.batch_interval_seconds
+
+    def _get_remaining_cache_time(self) -> float:
+        """获取剩余缓存时间"""
+        current_time = time.time()
+        time_since_last = current_time - self.last_batch_time
+        return max(0, self.batch_interval_seconds - time_since_last)
+
+    async def _execute_send_strategy(self, strategy: str, protocol_info: Dict):
+        """执行发送策略"""
+        if not self.message_queue:
+            return
+
+        messages = self.message_queue.copy()
+        self.message_queue.clear()
+
+        try:
+            if strategy == "batch_forward":
+                await self._send_batch_forward(messages, protocol_info)
+            elif strategy == "individual_burst":
+                await self._send_individual_burst(messages, protocol_info)
+            elif strategy in ["timeout_send", "force_individual"]:
+                await self._send_timeout_messages(messages, protocol_info)
+            else:
+                logger.warning(f"未知发送策略: {strategy}")
+                await self._send_individual_burst(messages, protocol_info)
+
+        except Exception as e:
+            logger.error(f"执行发送策略失败: {e}")
+            # 发送失败时重新加入队列
+            self.message_queue.extend(messages)
+        finally:
+            self.last_batch_time = time.time()
+
+    async def _send_batch_forward(self, messages: List[Dict], protocol_info: Dict):
+        """发送批量合并转发消息（仅支持 aiocqhttp）"""
+        if not self.group_id:
+            logger.warning("未配置群组ID，无法发送消息")
+            return
+
+        group_id = str(self.group_id).replace(":", "_")
+        unified_msg_origin = f"{protocol_info['name']}:GroupMessage:{group_id}"
+
+        logger.info(f"发送合并转发: {len(messages)}条消息 -> {unified_msg_origin}")
+
+        try:
+            # 构建合并转发节点
+            forward_nodes = []
+            for i, msg in enumerate(messages, 1):
+                try:
+                    content = []
+
+                    # 添加图片
+                    if msg.get("image_url"):
+                        content.append(Comp.Image.fromURL(msg["image_url"]))
+
+                    # 添加文本（针对 aiocqhttp 优化）
+                    message_text = msg["message_text"]
+                    if protocol_info["name"] == "aiocqhttp":
+                        processed_text = self._process_text_for_aiocqhttp(message_text)
+                        content.append(Comp.Plain(processed_text))
+                    else:
+                        content.append(Comp.Plain(message_text))
+
+                    # 创建转发节点
+                    node = Comp.Node(
+                        uin="2659908767",  # 可配置化
+                        name="媒体通知",
+                        content=content
+                    )
+                    forward_nodes.append(node)
+
+                except Exception as e:
+                    logger.error(f"构建转发节点失败: {e}")
+
+            if forward_nodes:
+                await self.context.send_message(unified_msg_origin, forward_nodes)
+                logger.info(f"✅ 成功发送 {len(forward_nodes)} 条合并转发消息")
+            else:
+                logger.error("没有有效的转发节点")
+
+        except Exception as e:
+            logger.error(f"发送合并转发消息失败: {e}")
+            # 回退到单独发送
+            await self._send_individual_burst(messages, protocol_info)
+
+    async def _send_individual_burst(self, messages: List[Dict], protocol_info: Dict):
+        """发送单独消息（连续发送）"""
+        if not self.group_id:
+            logger.warning("未配置群组ID，无法发送消息")
+            return
+
+        group_id = str(self.group_id).replace(":", "_")
+        unified_msg_origin = f"{protocol_info['name']}:GroupMessage:{group_id}"
+
+        logger.info(f"发送单独消息: {len(messages)}条消息 -> {unified_msg_origin}")
+
+        for i, msg in enumerate(messages, 1):
+            try:
+                content = []
+
+                # 添加图片
+                if msg.get("image_url"):
+                    content.append(Comp.Image.fromURL(msg["image_url"]))
+
+                # 添加文本
+                message_text = msg["message_text"]
+                if protocol_info["name"] == "aiocqhttp":
+                    processed_text = self._process_text_for_aiocqhttp(message_text)
+                    content.append(Comp.Plain(processed_text))
+                else:
+                    content.append(Comp.Plain(message_text))
+
+                await self.context.send_message(unified_msg_origin, content)
+                logger.debug(f"✅ 消息 {i}/{len(messages)} 发送成功")
+
+                # 添加短暂延迟避免频率限制
+                if i < len(messages):
+                    await asyncio.sleep(0.5)
+
+            except Exception as e:
+                logger.error(f"❌ 消息 {i} 发送失败: {e}")
+
+    async def _send_timeout_messages(self, messages: List[Dict], protocol_info: Dict):
+        """发送超时消息（根据协议端能力选择策略）"""
+        if protocol_info["supports_forward"] and len(messages) >= 2:
+            await self._send_batch_forward(messages, protocol_info)
+        else:
+            await self._send_individual_burst(messages, protocol_info)
 
     def _save_failed_request(self, body_text: str, headers: Dict):
         """保存失败的请求到文件"""
@@ -1804,34 +1996,25 @@ class MediaWebhookPlugin(Star):
                 "runtime": "24分钟",
             }
 
-    async def start_batch_processor(self):
-        """启动批量处理任务"""
-        logger.info("启动批量处理任务")
+    async def start_cache_processor(self):
+        """启动智能缓存处理器"""
+        logger.info("启动智能缓存处理器")
         while True:
             try:
-                # 使用较短的检查间隔，而不是等待整个批量间隔
-                check_interval = 10  # 每10秒检查一次
+                # 每10秒检查一次缓存状态
+                check_interval = 10
                 await asyncio.sleep(check_interval)
 
-                # 检查是否需要发送消息
-                if self.message_queue:
-                    current_time = time.time()
-                    time_since_last_batch = current_time - self.last_batch_time
-                    batch_interval = self.config.get("batch_interval_seconds", 300)
-
-                    if time_since_last_batch >= batch_interval:
-                        logger.info(f"批量处理器触发：超过间隔时间 {batch_interval}秒")
-                        await self.process_message_queue()
-                    else:
-                        remaining_time = batch_interval - time_since_last_batch
-                        logger.debug(f"批量处理器检查：队列有 {len(self.message_queue)} 条消息，剩余 {remaining_time:.1f}秒")
+                # 检查是否有消息需要超时发送
+                if self.message_queue and self._is_cache_timeout():
+                    logger.info("缓存处理器触发：消息超时，执行发送")
+                    await self._smart_send_check()
 
             except asyncio.CancelledError:
-                logger.info("批量处理任务被取消")
+                logger.info("缓存处理器被取消")
                 break
             except Exception as e:
-                logger.error(f"批量处理任务出错: {e}")
-                # 出错后等待一段时间再继续，避免无限循环错误
+                logger.error(f"缓存处理器出错: {e}")
                 await asyncio.sleep(10)
 
     async def process_message_queue(self):
@@ -2052,78 +2235,16 @@ class MediaWebhookPlugin(Star):
 
         yield event.plain_result(status_text)
 
-    @filter.command("webhook test")
-    async def webhook_test(self, event: AstrMessageEvent, source: str = "bgm"):
-        """测试Webhook功能
 
-        Args:
-            source: 数据源 (bgm/static)，默认为 bgm
-        """
-        if source.lower() in ["bgm", "bangumi"]:
-            yield event.plain_result("🔄 获取 BGM.TV 数据...")
-            test_data = await self.fetch_bgm_data()
-            if not test_data:
-                test_data = self.get_default_test_data()
-                yield event.plain_result("❌ BGM.TV 获取失败，使用静态数据")
-            else:
-                yield event.plain_result("✅ BGM.TV 数据获取成功")
-        else:
-            test_data = self.get_default_test_data()
-
-        # 生成消息
-        test_source = "jellyfin" if source.lower() in ["bgm", "bangumi"] else "default"
-        message_text = self.generate_message_text(test_data, test_source)
-
-        content = []
-        image_url = test_data.get("image_url")
-        if image_url:
-            try:
-                content.append(Comp.Image.fromURL(str(image_url)))
-            except Exception as e:
-                logger.warning(f"图片加载失败: {e}")
-                content.append(Comp.Plain(f"[图片加载失败]\n\n"))
-        content.append(Comp.Plain(message_text))
-
-        yield event.chain_result(content)
-
-    def get_default_test_data(self) -> Dict:
-        """获取默认测试数据"""
-        return {
-            "item_type": "Episode",
-            "series_name": "测试剧集",
-            "year": "2024",
-            "item_name": "测试集名称",
-            "season_number": 1,
-            "episode_number": 1,
-            "overview": "这是一个测试剧情简介",
-            "runtime": "45分钟",
-        }
-
-    @filter.command("webhook test simple")
-    async def webhook_test_simple(self, event: AstrMessageEvent):
-        """简单测试Webhook功能（不包含图片）"""
-        test_data = {
-            "item_type": "Episode",
-            "series_name": "测试剧集",
-            "year": "2024",
-            "item_name": "测试集名称",
-            "season_number": 1,
-            "episode_number": 1,
-            "overview": "这是一个测试剧情简介",
-            "runtime": "45分钟",
-        }
-
-        message_text = self.generate_message_text(test_data, "default")
-        yield event.plain_result(message_text)
 
     async def terminate(self):
         """插件卸载时的清理工作"""
         try:
-            # 取消批量处理任务
-            if hasattr(self, 'batch_processor_task') and not self.batch_processor_task.done():
-                self.batch_processor_task.cancel()
+            # 取消缓存处理任务
+            if hasattr(self, 'cache_processor_task') and not self.cache_processor_task.done():
+                self.cache_processor_task.cancel()
                 try:
-                    await self.batch_processor_task
+                    await self.cache_processor_task
                 except asyncio.CancelledError:
                     pass
 
