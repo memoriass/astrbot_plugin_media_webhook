@@ -3,13 +3,14 @@ import hashlib
 import html
 import json
 import time
-from typing import Dict, List
+from typing import Dict, List, Optional
 
+import aiohttp
 import astrbot.api.message_components as Comp
 from aiohttp import web
 from aiohttp.web import Request, Response
 from astrbot.api import AstrBotConfig, logger
-from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.star import Context, Star, register
 
 
@@ -34,6 +35,12 @@ class MediaWebhookPlugin(Star):
         self.batch_min_size = config.get("batch_min_size", 3)
         self.batch_interval_seconds = config.get("batch_interval_seconds", 300)
         self.cache_ttl_seconds = config.get("cache_ttl_seconds", 300)
+
+        # API 配置
+        self.tmdb_api_key = config.get("tmdb_api_key", "")
+        self.fanart_api_key = config.get("fanart_api_key", "")
+        self.tmdb_base_url = "https://api.themoviedb.org/3"
+        self.fanart_base_url = "https://webservice.fanart.tv/v3"
         
         # 消息队列和缓存
         self.message_queue: List[Dict] = []
@@ -135,6 +142,10 @@ class MediaWebhookPlugin(Star):
             if self.is_duplicate_request(media_data):
                 logger.info("检测到重复请求，忽略")
                 return Response(text="重复请求", status=200)
+
+            # 使用外部 API 丰富数据（除了 Ani-RSS）
+            if source != "ani-rss":
+                media_data = await self.enrich_media_data_with_external_apis(media_data)
 
             # 添加到队列
             await self.add_to_queue(media_data, source)
@@ -431,6 +442,127 @@ class MediaWebhookPlugin(Star):
         except Exception as e:
             logger.error(f"添加消息到队列失败: {e}")
 
+    async def enrich_media_data_with_external_apis(self, media_data: Dict) -> Dict:
+        """使用外部 API 丰富媒体数据（TMDB → Fanart.tv → 原始数据）"""
+        try:
+            # 如果没有 API 密钥，直接返回原始数据
+            if not self.tmdb_api_key:
+                logger.debug("未配置 TMDB API 密钥，跳过数据丰富")
+                return media_data
+
+            # 尝试从 TMDB 获取数据
+            tmdb_data = await self.get_tmdb_data(media_data)
+            if tmdb_data:
+                # 合并 TMDB 数据
+                enriched_data = self.merge_tmdb_data(media_data, tmdb_data)
+
+                # 如果没有图片，尝试从 Fanart.tv 获取
+                if not enriched_data.get("image_url") and self.fanart_api_key:
+                    fanart_image = await self.get_fanart_image(enriched_data, tmdb_data)
+                    if fanart_image:
+                        enriched_data["image_url"] = fanart_image
+
+                return enriched_data
+
+            return media_data
+
+        except Exception as e:
+            logger.error(f"丰富媒体数据失败: {e}")
+            return media_data
+
+    async def get_tmdb_data(self, media_data: Dict) -> Dict:
+        """从 TMDB 获取媒体数据"""
+        try:
+            series_name = media_data.get("series_name", "")
+            year = media_data.get("year", "")
+
+            if not series_name:
+                return {}
+
+            # 搜索电视剧
+            search_url = f"{self.tmdb_base_url}/search/tv"
+            params = {
+                "api_key": self.tmdb_api_key,
+                "query": series_name,
+                "language": "zh-CN"
+            }
+
+            if year:
+                params["first_air_date_year"] = year
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(search_url, params=params) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        results = data.get("results", [])
+
+                        if results:
+                            # 返回第一个匹配结果
+                            return results[0]
+
+            return {}
+
+        except Exception as e:
+            logger.error(f"获取 TMDB 数据失败: {e}")
+            return {}
+
+    def merge_tmdb_data(self, original_data: Dict, tmdb_data: Dict) -> Dict:
+        """合并 TMDB 数据到原始数据"""
+        try:
+            enriched_data = original_data.copy()
+
+            # 更新剧情简介（如果原始数据没有）
+            if not enriched_data.get("overview") and tmdb_data.get("overview"):
+                enriched_data["overview"] = tmdb_data["overview"]
+
+            # 更新年份（如果原始数据没有）
+            if not enriched_data.get("year") and tmdb_data.get("first_air_date"):
+                first_air_date = tmdb_data["first_air_date"]
+                if first_air_date:
+                    enriched_data["year"] = first_air_date.split("-")[0]
+
+            # 更新图片（如果原始数据没有）
+            if not enriched_data.get("image_url") and tmdb_data.get("poster_path"):
+                poster_path = tmdb_data["poster_path"]
+                enriched_data["image_url"] = f"https://image.tmdb.org/t/p/w500{poster_path}"
+
+            # 添加 TMDB ID 用于后续 Fanart.tv 查询
+            if tmdb_data.get("id"):
+                enriched_data["tmdb_id"] = tmdb_data["id"]
+
+            return enriched_data
+
+        except Exception as e:
+            logger.error(f"合并 TMDB 数据失败: {e}")
+            return original_data
+
+    async def get_fanart_image(self, media_data: Dict, tmdb_data: Dict) -> str:
+        """从 Fanart.tv 获取图片"""
+        try:
+            tmdb_id = tmdb_data.get("id")
+            if not tmdb_id:
+                return ""
+
+            fanart_url = f"{self.fanart_base_url}/tv/{tmdb_id}"
+            params = {"api_key": self.fanart_api_key}
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(fanart_url, params=params) as response:
+                    if response.status == 200:
+                        data = await response.json()
+
+                        # 优先选择 tvposter，然后是 tvbanner
+                        if "tvposter" in data and data["tvposter"]:
+                            return data["tvposter"][0]["url"]
+                        elif "tvbanner" in data and data["tvbanner"]:
+                            return data["tvbanner"][0]["url"]
+
+            return ""
+
+        except Exception as e:
+            logger.error(f"获取 Fanart.tv 图片失败: {e}")
+            return ""
+
     def generate_message_text(self, data: Dict) -> str:
         """生成消息文本"""
         cn_type = self.media_type_map.get(data.get("item_type", ""), data.get("item_type", ""))
@@ -539,33 +671,38 @@ class MediaWebhookPlugin(Star):
         """发送合并转发消息（仅 aiocqhttp）"""
         group_id = str(self.group_id).replace(":", "_")
         unified_msg_origin = f"{self.platform_name}:GroupMessage:{group_id}"
-        
+
         logger.info(f"发送合并转发: {len(messages)} 条消息")
-        
+
         try:
             # 构建合并转发节点
             forward_nodes = []
             for msg in messages:
-                content = []
-                
+                content_list = []
+
                 # 添加图片
                 if msg.get("image_url"):
-                    content.append(Comp.Image.fromURL(msg["image_url"]))
-                
+                    content_list.append(Comp.Image.fromURL(msg["image_url"]))
+
                 # 添加文本
-                content.append(Comp.Plain(msg["message_text"]))
-                
+                content_list.append(Comp.Plain(msg["message_text"]))
+
+                # 创建消息链
+                message_chain = MessageChain(content_list)
+
                 # 创建转发节点
                 node = Comp.Node(
                     uin="2659908767",  # 可配置
                     name="媒体通知",
-                    content=content
+                    content=content_list
                 )
                 forward_nodes.append(node)
-            
-            await self.context.send_message(unified_msg_origin, forward_nodes)
+
+            # 创建合并转发消息链
+            forward_chain = MessageChain(forward_nodes)
+            await self.context.send_message(unified_msg_origin, forward_chain)
             logger.info(f"✅ 成功发送 {len(forward_nodes)} 条合并转发消息")
-            
+
         except Exception as e:
             logger.error(f"发送合并转发失败: {e}")
             # 回退到单独发送
@@ -575,27 +712,30 @@ class MediaWebhookPlugin(Star):
         """发送单独消息"""
         group_id = str(self.group_id).replace(":", "_")
         unified_msg_origin = f"{self.platform_name}:GroupMessage:{group_id}"
-        
+
         logger.info(f"发送单独消息: {len(messages)} 条消息")
-        
+
         for i, msg in enumerate(messages, 1):
             try:
-                content = []
-                
+                content_list = []
+
                 # 添加图片
                 if msg.get("image_url"):
-                    content.append(Comp.Image.fromURL(msg["image_url"]))
-                
+                    content_list.append(Comp.Image.fromURL(msg["image_url"]))
+
                 # 添加文本
-                content.append(Comp.Plain(msg["message_text"]))
-                
-                await self.context.send_message(unified_msg_origin, content)
+                content_list.append(Comp.Plain(msg["message_text"]))
+
+                # 创建消息链
+                message_chain = MessageChain(content_list)
+
+                await self.context.send_message(unified_msg_origin, message_chain)
                 logger.debug(f"✅ 消息 {i}/{len(messages)} 发送成功")
-                
+
                 # 添加延迟避免频率限制
                 if i < len(messages):
                     await asyncio.sleep(0.5)
-                    
+
             except Exception as e:
                 logger.error(f"❌ 消息 {i} 发送失败: {e}")
 

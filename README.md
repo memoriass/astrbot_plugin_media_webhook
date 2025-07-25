@@ -18,7 +18,12 @@
 {
   "webhook_port": 60071,
   "group_id": "your-group-id",
-  "tmdb_api_key": "your-tmdb-key"
+  "platform_name": "aiocqhttp",
+  "batch_min_size": 3,
+  "batch_interval_seconds": 300,
+  "cache_ttl_seconds": 300,
+  "tmdb_api_key": "your-tmdb-key",
+  "fanart_api_key": "your-fanart-key"
 }
 ```
 
