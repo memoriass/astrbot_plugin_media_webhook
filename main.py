@@ -2,7 +2,6 @@ import asyncio
 import hashlib
 import json
 import time
-from typing import Dict, List, Optional
 
 from aiohttp import web
 from aiohttp.web import Request, Response
@@ -53,8 +52,8 @@ class MediaWebhookPlugin(Star):
         )
 
         # 消息队列和缓存
-        self.message_queue: List[Dict] = []
-        self.request_cache: Dict[str, float] = {}
+        self.message_queue: list[dict] = []
+        self.request_cache: dict[str, float] = {}
         self.last_batch_time = time.time()
 
         # 媒体类型映射
@@ -115,7 +114,7 @@ class MediaWebhookPlugin(Star):
 
             # 记录请求信息
             headers = dict(request.headers)
-            logger.info(f"收到 Webhook 请求:")
+            logger.info("收到 Webhook 请求:")
             logger.info(f"  User-Agent: {headers.get('user-agent', 'N/A')}")
             logger.info(f"  Content-Type: {headers.get('content-type', 'N/A')}")
             logger.info(f"  请求体长度: {len(body_text)} 字符")
@@ -181,7 +180,7 @@ class MediaWebhookPlugin(Star):
             logger.error(f"Webhook 处理出错: {e}")
             return Response(text="处理消息时发生内部错误", status=500)
 
-    def is_duplicate_request(self, media_data: Dict) -> bool:
+    def is_duplicate_request(self, media_data: dict) -> bool:
         """检查是否为重复请求 - 使用哈希校验，排除图片以保持更高准确率"""
         request_hash = self.calculate_request_hash(media_data)
         if not request_hash:
@@ -207,23 +206,22 @@ class MediaWebhookPlugin(Star):
         )
         return False
 
-    def calculate_request_hash(self, media_data: Dict) -> str:
+    def calculate_request_hash(self, media_data: dict) -> str:
         """计算请求哈希值 - 排除图片和不稳定字段以提高准确率"""
         try:
             # 根据数据来源选择不同的哈希策略
             if self.is_ani_rss_data(media_data):
                 return self.calculate_ani_rss_hash(media_data)
-            else:
-                return self.calculate_standard_hash(media_data)
+            return self.calculate_standard_hash(media_data)
         except Exception as e:
             logger.error(f"计算请求哈希失败: {e}")
             return ""
 
-    def is_ani_rss_data(self, media_data: Dict) -> bool:
+    def is_ani_rss_data(self, media_data: dict) -> bool:
         """判断是否为 Ani-RSS 数据"""
         return "meassage" in media_data or "text_template" in media_data
 
-    def calculate_ani_rss_hash(self, media_data: Dict) -> str:
+    def calculate_ani_rss_hash(self, media_data: dict) -> str:
         """计算 Ani-RSS 数据的哈希值"""
         # 对于 Ani-RSS，提取关键信息进行哈希
         if "meassage" in media_data:
@@ -252,7 +250,7 @@ class MediaWebhookPlugin(Star):
         hash_string = json.dumps(hash_data, sort_keys=True)
         return hashlib.sha256(hash_string.encode()).hexdigest()
 
-    def calculate_standard_hash(self, media_data: Dict) -> str:
+    def calculate_standard_hash(self, media_data: dict) -> str:
         """计算标准媒体数据的哈希值"""
         # 排除不稳定字段
         stable_fields = {
@@ -276,7 +274,7 @@ class MediaWebhookPlugin(Star):
         if expired_keys:
             logger.debug(f"清理了 {len(expired_keys)} 个过期缓存条目")
 
-    async def add_to_queue(self, message_payload: Dict):
+    async def add_to_queue(self, message_payload: dict):
         """添加消息载荷到队列（通用方法）"""
         try:
             # 添加时间戳（如果没有）
@@ -296,7 +294,7 @@ class MediaWebhookPlugin(Star):
         except Exception as e:
             logger.error(f"添加消息到队列失败: {e}")
 
-    async def add_ani_rss_to_queue(self, message_payload: Dict):
+    async def add_ani_rss_to_queue(self, message_payload: dict):
         """添加 Ani-RSS 消息到队列"""
         try:
             # 添加时间戳
@@ -355,7 +353,7 @@ class MediaWebhookPlugin(Star):
         finally:
             self.last_batch_time = time.time()
 
-    async def send_batch_messages(self, messages: List[Dict]):
+    async def send_batch_messages(self, messages: list[dict]):
         """发送合并转发消息（仅 aiocqhttp）"""
         group_id = str(self.group_id).replace(":", "_")
         unified_msg_origin = f"{self.platform_name}:GroupMessage:{group_id}"
@@ -375,12 +373,11 @@ class MediaWebhookPlugin(Star):
                 # 添加文本
                 content_list.append(Comp.Plain(msg["message_text"]))
 
-                # 创建消息链
-                message_chain = MessageChain(content_list)
-
                 # 创建转发节点
                 node = Comp.Node(
-                    uin="2659908767", name="媒体通知", content=content_list  # 可配置
+                    uin="2659908767",
+                    name="媒体通知",
+                    content=content_list,  # 可配置
                 )
                 forward_nodes.append(node)
 
@@ -394,7 +391,7 @@ class MediaWebhookPlugin(Star):
             # 回退到单独发送
             await self.send_individual_messages(messages)
 
-    async def send_individual_messages(self, messages: List[Dict]):
+    async def send_individual_messages(self, messages: list[dict]):
         """发送单独消息"""
         group_id = str(self.group_id).replace(":", "_")
         unified_msg_origin = f"{self.platform_name}:GroupMessage:{group_id}"
@@ -436,20 +433,20 @@ class MediaWebhookPlugin(Star):
 
         status_text = f"""📊 Media Webhook 状态
 
-🌐 服务状态: {'运行中' if self.site else '未启动'}
+🌐 服务状态: {"运行中" if self.site else "未启动"}
 📡 监听端口: {self.webhook_port}
 📋 队列消息: {queue_size} 条
 🗂️ 缓存条目: {cache_size} 条
 ⚙️ 批量阈值: {self.batch_min_size} 条
 ⏱️ 批量间隔: {self.batch_interval_seconds} 秒
-🎯 目标群组: {self.group_id or '未配置'}
+🎯 目标群组: {self.group_id or "未配置"}
 🤖 协议平台: {self.platform_name}
 
 📂 子模块状态:
   🎬 媒体处理器: 已启用
-    - TMDB 丰富: {'启用' if media_stats.get('tmdb_enabled') else '禁用'}
-    - 支持来源: {', '.join(media_stats.get('supported_sources', []))}
-    - TMDB 缓存: {media_stats.get('cache_size', 0)} 条
+    - TMDB 丰富: {"启用" if media_stats.get("tmdb_enabled") else "禁用"}
+    - 支持来源: {", ".join(media_stats.get("supported_sources", []))}
+    - TMDB 缓存: {media_stats.get("cache_size", 0)} 条
   📺 Ani-RSS 处理器: 已启用"""
 
         yield event.plain_result(status_text)

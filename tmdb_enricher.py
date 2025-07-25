@@ -5,31 +5,32 @@ TMDB 元数据丰富模块
 
 import asyncio
 import time
-from typing import Dict, List, Optional
+from typing import Optional
 
 import aiohttp
+
 from astrbot.api import logger
 
 
 class TMDBEnricher:
     """TMDB 元数据丰富器"""
-    
+
     def __init__(self, api_key: str, fanart_api_key: str = ""):
         self.tmdb_api_key = api_key
         self.fanart_api_key = fanart_api_key
         self.tmdb_base_url = "https://api.themoviedb.org/3"
         self.fanart_base_url = "https://webservice.fanart.tv/v3"
-        
+
         # 缓存机制
-        self.tmdb_cache: Dict[str, Dict] = {}
+        self.tmdb_cache: dict[str, dict] = {}
         self.cache_ttl = 3600  # 缓存1小时
-        self.cache_timestamps: Dict[str, float] = {}
-        
+        self.cache_timestamps: dict[str, float] = {}
+
         # 请求限制
         self.last_request_time = 0
         self.request_interval = 0.25  # 250ms 间隔，避免超过 TMDB 限制
 
-    async def enrich_media_data(self, media_data: Dict) -> Dict:
+    async def enrich_media_data(self, media_data: dict) -> dict:
         """使用 TMDB API 丰富媒体数据"""
         try:
             if not self.tmdb_api_key:
@@ -37,14 +38,13 @@ class TMDBEnricher:
                 return media_data
 
             item_type = media_data.get("item_type", "")
-            
+
             # 只处理剧集类型
             if item_type != "Episode":
                 logger.debug(f"跳过非剧集类型: {item_type}")
                 return media_data
 
             series_name = media_data.get("series_name", "")
-            season_number = media_data.get("season_number", "")
             episode_number = media_data.get("episode_number", "")
 
             if not all([series_name, episode_number]):
@@ -57,24 +57,23 @@ class TMDBEnricher:
             enriched_data = await self.try_tmdb_enrichment(media_data)
             if enriched_data.get("tmdb_enriched"):
                 logger.info("TMDB 数据丰富成功")
-                
+
                 # 如果没有图片，尝试从 Fanart.tv 获取
                 if not enriched_data.get("image_url") and self.fanart_api_key:
                     fanart_image = await self.get_fanart_image(enriched_data)
                     if fanart_image:
                         enriched_data["image_url"] = fanart_image
                         logger.info("Fanart.tv 图片获取成功")
-                
+
                 return enriched_data
-            else:
-                logger.info("TMDB 数据丰富失败，返回原始数据")
-                return media_data
+            logger.info("TMDB 数据丰富失败，返回原始数据")
+            return media_data
 
         except Exception as e:
             logger.error(f"TMDB 数据丰富出错: {e}")
             return media_data
 
-    async def try_tmdb_enrichment(self, media_data: Dict) -> Dict:
+    async def try_tmdb_enrichment(self, media_data: dict) -> dict:
         """尝试使用 TMDB 丰富数据"""
         try:
             series_name = media_data.get("series_name", "")
@@ -117,7 +116,9 @@ class TMDBEnricher:
                 # 更新图片
                 still_path = episode_details.get("still_path")
                 if still_path and not enriched_data.get("image_url"):
-                    enriched_data["image_url"] = f"https://image.tmdb.org/t/p/w500{still_path}"
+                    enriched_data["image_url"] = (
+                        f"https://image.tmdb.org/t/p/w500{still_path}"
+                    )
 
                 # 添加 TMDB 标记和 ID
                 enriched_data["tmdb_enriched"] = True
@@ -132,7 +133,7 @@ class TMDBEnricher:
             logger.error(f"TMDB 丰富处理出错: {e}")
             return media_data
 
-    async def search_tmdb_tv_show(self, series_name: str) -> Optional[Dict]:
+    async def search_tmdb_tv_show(self, series_name: str) -> Optional[dict]:
         """搜索 TMDB TV 节目"""
         if not series_name:
             return None
@@ -153,7 +154,7 @@ class TMDBEnricher:
             params = {
                 "api_key": self.tmdb_api_key,
                 "query": series_name,
-                "language": "zh-CN"
+                "language": "zh-CN",
             }
 
             async with aiohttp.ClientSession() as session:
@@ -161,15 +162,14 @@ class TMDBEnricher:
                     if response.status == 200:
                         data = await response.json()
                         results = data.get("results", [])
-                        
+
                         if results:
                             # 返回第一个匹配结果
                             tv_show = results[0]
                             self.set_cache(cache_key, tv_show)
                             logger.info(f"TMDB TV 搜索成功: {series_name}")
                             return tv_show
-                        else:
-                            logger.warning(f"TMDB TV 搜索无结果: {series_name}")
+                        logger.warning(f"TMDB TV 搜索无结果: {series_name}")
                     else:
                         logger.warning(f"TMDB TV 搜索失败: {response.status}")
 
@@ -181,7 +181,9 @@ class TMDBEnricher:
             logger.error(f"TMDB TV 搜索出错: {e}")
             return None
 
-    async def get_tmdb_episode_details(self, tv_id: int, season_number: int, episode_number: int) -> Optional[Dict]:
+    async def get_tmdb_episode_details(
+        self, tv_id: int, season_number: int, episode_number: int
+    ) -> Optional[dict]:
         """获取 TMDB 剧集详情"""
         try:
             # 检查缓存
@@ -196,10 +198,7 @@ class TMDBEnricher:
 
             # 获取剧集详情
             episode_url = f"{self.tmdb_base_url}/tv/{tv_id}/season/{season_number}/episode/{episode_number}"
-            params = {
-                "api_key": self.tmdb_api_key,
-                "language": "zh-CN"
-            }
+            params = {"api_key": self.tmdb_api_key, "language": "zh-CN"}
 
             async with aiohttp.ClientSession() as session:
                 async with session.get(episode_url, params=params) as response:
@@ -208,8 +207,7 @@ class TMDBEnricher:
                         self.set_cache(cache_key, episode_data)
                         logger.info(f"TMDB 剧集详情获取成功: {cache_key}")
                         return episode_data
-                    else:
-                        logger.warning(f"TMDB 剧集详情获取失败: {response.status}")
+                    logger.warning(f"TMDB 剧集详情获取失败: {response.status}")
 
             # 缓存空结果
             self.set_cache(cache_key, None)
@@ -219,7 +217,7 @@ class TMDBEnricher:
             logger.error(f"TMDB 剧集详情获取出错: {e}")
             return None
 
-    async def get_fanart_image(self, media_data: Dict) -> str:
+    async def get_fanart_image(self, media_data: dict) -> str:
         """从 Fanart.tv 获取图片"""
         try:
             if not self.fanart_api_key:
@@ -246,20 +244,19 @@ class TMDBEnricher:
                 async with session.get(fanart_url, params=params) as response:
                     if response.status == 200:
                         data = await response.json()
-                        
+
                         # 优先选择 tvposter，然后是 tvbanner
                         image_url = ""
-                        if "tvposter" in data and data["tvposter"]:
+                        if data.get("tvposter"):
                             image_url = data["tvposter"][0]["url"]
-                        elif "tvbanner" in data and data["tvbanner"]:
+                        elif data.get("tvbanner"):
                             image_url = data["tvbanner"][0]["url"]
-                        
+
                         self.set_cache(cache_key, image_url)
                         if image_url:
                             logger.info(f"Fanart.tv 图片获取成功: {cache_key}")
                         return image_url
-                    else:
-                        logger.warning(f"Fanart.tv 请求失败: {response.status}")
+                    logger.warning(f"Fanart.tv 请求失败: {response.status}")
 
             # 缓存空结果
             self.set_cache(cache_key, "")
@@ -273,18 +270,18 @@ class TMDBEnricher:
         """请求限制"""
         current_time = time.time()
         time_since_last = current_time - self.last_request_time
-        
+
         if time_since_last < self.request_interval:
             sleep_time = self.request_interval - time_since_last
             await asyncio.sleep(sleep_time)
-        
+
         self.last_request_time = time.time()
 
-    def get_from_cache(self, key: str) -> Optional[Dict]:
+    def get_from_cache(self, key: str) -> Optional[dict]:
         """从缓存获取数据"""
         if key not in self.tmdb_cache:
             return None
-        
+
         # 检查是否过期
         if key in self.cache_timestamps:
             cache_time = self.cache_timestamps[key]
@@ -293,14 +290,14 @@ class TMDBEnricher:
                 del self.tmdb_cache[key]
                 del self.cache_timestamps[key]
                 return None
-        
+
         return self.tmdb_cache[key]
 
-    def set_cache(self, key: str, value: Dict):
+    def set_cache(self, key: str, value: dict):
         """设置缓存"""
         self.tmdb_cache[key] = value
         self.cache_timestamps[key] = time.time()
-        
+
         # 清理过期缓存
         self.cleanup_expired_cache()
 
@@ -308,23 +305,23 @@ class TMDBEnricher:
         """清理过期缓存"""
         current_time = time.time()
         expired_keys = []
-        
+
         for key, cache_time in self.cache_timestamps.items():
             if current_time - cache_time > self.cache_ttl:
                 expired_keys.append(key)
-        
+
         for key in expired_keys:
             if key in self.tmdb_cache:
                 del self.tmdb_cache[key]
             if key in self.cache_timestamps:
                 del self.cache_timestamps[key]
-        
+
         if expired_keys:
             logger.debug(f"清理了 {len(expired_keys)} 个过期 TMDB 缓存条目")
 
-    def get_cache_stats(self) -> Dict:
+    def get_cache_stats(self) -> dict:
         """获取缓存统计信息"""
         return {
             "cache_size": len(self.tmdb_cache),
-            "cache_keys": list(self.tmdb_cache.keys())
+            "cache_keys": list(self.tmdb_cache.keys()),
         }
