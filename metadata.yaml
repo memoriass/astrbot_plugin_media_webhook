@@ -1,5 +1,5 @@
 name: "Media Webhook"
 author: "memoriass"
 description: "媒体通知 Webhook 插件，接收媒体服务器的通知并发送到群聊"
-version: "1.0.11"
+version: "1.0.13"
 repo: "https://github.com/example/astrbot_plugin_media_webhook"
