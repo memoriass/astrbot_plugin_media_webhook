@@ -418,11 +418,11 @@ class MediaWebhookPlugin(Star):
     async def add_to_queue(self, media_data: Dict, source: str):
         """添加消息到队列"""
         try:
-            # 对于 Ani-RSS，需要特殊处理图片提取
+            # 对于 Ani-RSS，直接使用原始数据，不进行转换
             if source == "ani-rss":
                 ani_rss_content = self.extract_ani_rss_content(media_data)
                 image_url = ani_rss_content.get("image_url", "")
-                message_text = ani_rss_content.get("text", "")
+                message_text = self.generate_ani_rss_raw_message(media_data)
             else:
                 image_url = media_data.get("image_url", "")
                 message_text = self.generate_message_text(media_data)
@@ -441,6 +441,67 @@ class MediaWebhookPlugin(Star):
 
         except Exception as e:
             logger.error(f"添加消息到队列失败: {e}")
+
+    def generate_ani_rss_raw_message(self, data: Dict) -> str:
+        """为 Ani-RSS 生成原始格式消息（仅返回文本部分）"""
+        content = self.extract_ani_rss_content(data)
+        return content["text"]
+
+    def generate_title_by_type(self, item_type: str, cn_type: str, emoji: str, action: str, data: Dict) -> str:
+        """根据媒体类型生成合适的标题"""
+        if item_type == "Movie":
+            return f"{emoji} 新电影{action}"
+        elif item_type in ["Series", "Season"]:
+            return f"{emoji} 剧集{action}"
+        elif item_type == "Episode":
+            # 对于剧集，显示更具体的信息
+            season_num = data.get("season_number", "")
+            episode_num = data.get("episode_number", "")
+            if season_num and episode_num:
+                return f"{emoji} 新剧集{action}"
+            else:
+                return f"{emoji} 剧集{action}"
+        elif item_type == "Album":
+            return f"{emoji} 新专辑{action}"
+        elif item_type == "Song":
+            return f"{emoji} 新歌曲{action}"
+        elif item_type == "Video":
+            return f"{emoji} 新视频{action}"
+        elif item_type in ["Audio", "AudioBook"]:
+            return f"{emoji} 新音频{action}"
+        elif item_type == "Book":
+            return f"{emoji} 新图书{action}"
+        else:
+            # 默认格式
+            return f"{emoji} 新{cn_type}{action}"
+
+    def get_first_paragraph(self, text: str) -> str:
+        """获取文本的第一段"""
+        if not text:
+            return ""
+
+        # 按句号分割
+        sentences = text.split('。')
+        if len(sentences) > 1 and sentences[0]:
+            first_sentence = sentences[0].strip() + '。'
+            # 限制长度
+            if len(first_sentence) > 100:
+                return first_sentence[:97] + "..."
+            return first_sentence
+
+        # 按换行符分割
+        lines = text.split('\n')
+        first_line = lines[0].strip()
+        if first_line:
+            # 限制长度
+            if len(first_line) > 100:
+                return first_line[:97] + "..."
+            return first_line
+
+        # 如果都没有，直接截取前100个字符
+        if len(text) > 100:
+            return text[:97] + "..."
+        return text.strip()
 
     async def enrich_media_data_with_external_apis(self, media_data: Dict) -> Dict:
         """使用外部 API 丰富媒体数据（TMDB → Fanart.tv → 原始数据）"""
@@ -564,28 +625,59 @@ class MediaWebhookPlugin(Star):
             return ""
 
     def generate_message_text(self, data: Dict) -> str:
-        """生成消息文本"""
-        cn_type = self.media_type_map.get(data.get("item_type", ""), data.get("item_type", ""))
-        emoji = self.type_emoji_map.get(data.get("item_type", ""), self.type_emoji_map["Default"])
-        
-        # 构建消息
-        message_parts = [f"{emoji} 新{cn_type}上线"]
-        
-        # 主要信息
+        """生成消息文本（紧凑排列优化）"""
+        item_type = data.get("item_type", "")
+        cn_type = self.media_type_map.get(item_type, item_type)
+        emoji = self.type_emoji_map.get(item_type, self.type_emoji_map["Default"])
+
+        # 生成标题
+        title = self.generate_title_by_type(item_type, cn_type, emoji, "上线", data)
+        message_parts = [title]
+
+        # 主要信息（紧凑排列）
         main_section = self.generate_main_section(data)
         if main_section:
             message_parts.append(main_section)
-        
-        # 剧情简介
-        if data.get("overview"):
-            decoded_overview = html.unescape(data["overview"])
-            message_parts.append(f"剧情简介:\n{decoded_overview}")
-        
-        # 时长
-        if data.get("runtime"):
-            message_parts.append(f"时长: {data['runtime']}")
-        
-        return "\n\n".join(message_parts)
+
+        # 只显示第一段剧情简介
+        overview = data.get("overview", "")
+        if overview:
+            decoded_overview = html.unescape(overview)
+            # 只取第一段（以句号、换行符或长度为界）
+            first_paragraph = self.get_first_paragraph(decoded_overview)
+            if first_paragraph:
+                if item_type == "Movie":
+                    message_parts.append(f"剧情简介: {first_paragraph}")
+                elif item_type in ["Series", "Season", "Episode"]:
+                    message_parts.append(f"剧情简介: {first_paragraph}")
+                elif item_type == "Album":
+                    message_parts.append(f"专辑介绍: {first_paragraph}")
+                elif item_type == "Song":
+                    message_parts.append(f"歌曲介绍: {first_paragraph}")
+                elif item_type == "Book":
+                    message_parts.append(f"内容简介: {first_paragraph}")
+                else:
+                    message_parts.append(f"内容简介: {first_paragraph}")
+
+        # 时长信息
+        runtime = data.get("runtime", "")
+        if runtime:
+            if item_type == "Movie":
+                message_parts.append(f"片长: {runtime}")
+            elif item_type in ["Episode", "Video"]:
+                message_parts.append(f"时长: {runtime}")
+            elif item_type == "Song":
+                message_parts.append(f"时长: {runtime}")
+            else:
+                message_parts.append(f"时长: {runtime}")
+
+        # 数据来源标记
+        if data.get("tmdb_enriched"):
+            message_parts.append("✨ 数据来源: TMDB")
+        elif data.get("bgm_enriched"):
+            message_parts.append("✨ 数据来源: BGM.TV")
+
+        return "\n".join(message_parts)
 
     def generate_main_section(self, data: Dict) -> str:
         """生成主要信息部分"""
