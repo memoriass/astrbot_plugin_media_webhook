@@ -4,6 +4,7 @@
 自动集成 TMDB 数据丰富功能
 """
 
+import html
 import time
 from typing import Optional
 
@@ -110,52 +111,32 @@ class MediaHandler:
         return stats
 
     def create_message_payload(self, media_data: dict, source: str) -> dict:
-        """创建标准消息载荷（避免图片重复显示）"""
+        """创建标准消息载荷（图片嵌入到消息中）"""
         try:
             # 获取图片 URL
             image_url = media_data.get("image_url", "")
 
-            # 生成消息文本（包含首行图片标记）
-            message_text = self.generate_message_text(media_data)
+            # 生成消息文本（不包含图片标记，因为图片将直接嵌入）
+            message_text = self.generate_message_text_without_image_line(media_data)
 
             # 创建消息载荷
-            # 注意：如果消息文本中已包含图片标记，则不在载荷中重复设置 image_url
-            # 这样可以避免协议端重复显示图片
+            # 参考 ani-rss 模块的逻辑：图片和文本都包含在载荷中，由发送逻辑组合
             message_payload = {
-                "image_url": (
-                    image_url if not self.has_image_line_in_text(message_text) else ""
-                ),
+                "image_url": image_url,  # 始终包含图片URL（如果有）
                 "message_text": message_text,
                 "source": source,
                 "media_data": media_data,
                 "timestamp": time.time(),
-                "has_inline_image": bool(
-                    image_url and self.has_image_line_in_text(message_text)
-                ),
             }
 
             logger.debug(
-                f"创建消息载荷: 图片URL={'有' if image_url else '无'}, 内联图片={'有' if message_payload['has_inline_image'] else '无'}"
+                f"创建消息载荷: 图片URL={'有' if image_url else '无'}, 消息文本长度={len(message_text)}"
             )
             return message_payload
 
         except Exception as e:
             logger.error(f"创建消息载荷失败: {e}")
             return self.create_fallback_payload({}, source)
-
-    def has_image_line_in_text(self, message_text: str) -> bool:
-        """检查消息文本中是否包含图片标记行"""
-        try:
-            if not message_text:
-                return False
-
-            # 检查是否包含图片标记
-            lines = message_text.split("\n")
-            return any(line.strip().startswith("🖼️") for line in lines)
-
-        except Exception as e:
-            logger.error(f"检查图片标记行失败: {e}")
-            return False
 
     def create_fallback_payload(self, raw_data: dict, source: str) -> dict:
         """创建降级消息载荷"""
@@ -223,6 +204,61 @@ class MediaHandler:
                 if item_type == "Movie":
                     message_parts.append(f"片长: {runtime}")
                 elif item_type in ["Episode", "Video"] or item_type == "Song":
+                    message_parts.append(f"时长: {runtime}")
+                else:
+                    message_parts.append(f"时长: {runtime}")
+
+            # 数据来源标记
+            if data.get("tmdb_enriched"):
+                message_parts.append("✨ 数据来源: TMDB")
+            elif data.get("bgm_enriched"):
+                message_parts.append("✨ 数据来源: BGM.TV")
+
+            return "\n".join(message_parts)
+
+        except Exception as e:
+            logger.error(f"生成消息文本失败: {e}")
+            return f"媒体通知 - {data.get('item_type', 'Unknown')}"
+
+    def generate_message_text_without_image_line(self, data: dict) -> str:
+        """生成消息文本（不包含图片行，图片将直接嵌入）"""
+        try:
+            item_type = data.get("item_type", "")
+            # 使用处理器的类型映射
+            processor = self.processor_manager.get_processor("generic")
+            cn_type = processor.get_media_type_display(item_type)
+
+            message_parts = []
+
+            # 生成标题（不包含图片行）
+            title = self.generate_title_by_type(item_type, cn_type, "上线", data)
+            message_parts.append(title)
+
+            # 主要信息（紧凑排列）
+            main_section = self.generate_main_section(data)
+            if main_section:
+                message_parts.append(main_section)
+
+            # 只显示第一段剧情简介
+            overview = data.get("overview", "")
+            if overview:
+                decoded_overview = html.unescape(overview)
+                # 只取第一段
+                first_paragraph = self.get_first_paragraph(decoded_overview)
+                if first_paragraph:
+                    if item_type == "Movie" or item_type in [
+                        "Series",
+                        "Season",
+                        "Episode",
+                    ]:
+                        message_parts.append(f"剧情: {first_paragraph}")
+                    else:
+                        message_parts.append(f"简介: {first_paragraph}")
+
+            # 时长信息
+            runtime = data.get("runtime", "")
+            if runtime:
+                if item_type == "Movie":
                     message_parts.append(f"时长: {runtime}")
                 else:
                     message_parts.append(f"时长: {runtime}")
