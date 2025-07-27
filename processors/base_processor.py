@@ -6,19 +6,19 @@
 import html
 import re
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any
+from typing import Optional, Any
 
 from astrbot.api import logger
 
 
 class BaseMediaProcessor(ABC):
     """基础媒体处理器抽象类"""
-    
+
     def __init__(self):
         # 媒体类型映射
         self.media_type_map = {
             "Movie": "电影",
-            "Series": "剧集", 
+            "Series": "剧集",
             "Season": "剧季",
             "Episode": "剧集",
             "Album": "专辑",
@@ -47,13 +47,13 @@ class BaseMediaProcessor(ABC):
         """清理文本内容"""
         if not text:
             return ""
-        
+
         # HTML 解码
         text = html.unescape(text)
-        
+
         # 移除多余的空白字符
-        text = re.sub(r'\s+', ' ', text).strip()
-        
+        text = re.sub(r"\s+", " ", text).strip()
+
         return text
 
     def safe_get_runtime(self, runtime_ticks: Any) -> str:
@@ -94,10 +94,10 @@ class BaseMediaProcessor(ABC):
         # 检查是否有基本的名称信息（确保不是空字符串）
         series_name = data.get("series_name", "").strip()
         item_name = data.get("item_name", "").strip()
-        
+
         if not (series_name or item_name):
             logger.error("媒体数据缺少名称信息")
             logger.debug(f"series_name: '{series_name}', item_name: '{item_name}'")
             return False
-        
+
         return True

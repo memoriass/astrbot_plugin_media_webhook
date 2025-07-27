@@ -3,28 +3,28 @@ Emby媒体处理器
 专门处理Emby媒体服务器的webhook数据
 """
 
-from typing import Optional, Dict, Any
+from typing import Optional
 from astrbot.api import logger
 from .base_processor import BaseMediaProcessor
 
 
 class EmbyProcessor(BaseMediaProcessor):
     """Emby媒体处理器"""
-    
+
     def can_handle(self, data: dict, headers: Optional[dict] = None) -> bool:
         """检查是否为Emby数据"""
         # Emby特征：包含Item和Server字段
         if "Item" in data and "Server" in data:
             logger.debug("检测到Emby数据结构特征")
             return True
-        
+
         # 检查User-Agent
         if headers:
             user_agent = headers.get("User-Agent", "").lower()
             if "emby" in user_agent:
                 logger.debug("通过User-Agent检测到Emby")
                 return True
-        
+
         return False
 
     def convert_to_standard(self, data: dict, headers: Optional[dict] = None) -> dict:
@@ -67,13 +67,13 @@ class EmbyProcessor(BaseMediaProcessor):
             image_url = ""
             image_tags = item.get("ImageTags", {})
             logger.debug(f"Emby ImageTags: {image_tags}")
-            
+
             if image_tags.get("Primary"):
                 server_info = data.get("Server", {})
                 server_url = server_info.get("Url", "")
                 item_id = item.get("Id", "")
                 logger.debug(f"Emby 图片信息: server_url={server_url}, item_id={item_id}")
-                
+
                 if server_url and item_id:
                     # 确保服务器URL不以/结尾
                     server_url = server_url.rstrip("/")
@@ -94,7 +94,7 @@ class EmbyProcessor(BaseMediaProcessor):
                 image_url=image_url,
                 source_data="emby"
             )
-            
+
             logger.debug(f"Emby 转换结果: {result}")
             return result
 
@@ -106,31 +106,31 @@ class EmbyProcessor(BaseMediaProcessor):
     def extract_emby_metadata(self, item: dict) -> dict:
         """提取Emby特有的元数据"""
         metadata = {}
-        
+
         # 提取演员信息
         people = item.get("People", [])
         actors = [person.get("Name", "") for person in people if person.get("Type") == "Actor"]
         if actors:
             metadata["actors"] = actors[:5]  # 限制前5个演员
-        
+
         # 提取导演信息
         directors = [person.get("Name", "") for person in people if person.get("Type") == "Director"]
         if directors:
             metadata["directors"] = directors
-        
+
         # 提取制片公司
         studios = item.get("Studios", [])
         if studios:
             metadata["studios"] = [studio.get("Name", "") for studio in studios]
-        
+
         # 提取评分
         community_rating = item.get("CommunityRating")
         if community_rating:
             metadata["rating"] = community_rating
-        
+
         # 提取标签
         tags = item.get("Tags", [])
         if tags:
             metadata["tags"] = tags
-        
+
         return metadata

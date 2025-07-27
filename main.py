@@ -45,11 +45,21 @@ class MediaWebhookPlugin(Star):
         self.ani_rss_handler = AniRSSHandler()
         self.media_handler = MediaHandler(self.tmdb_api_key, self.fanart_api_key)
 
+        # 打印工作正常的子模块
+        working_modules = []
+
+        # 检查 Ani-RSS 处理器
+        if self.ani_rss_handler:
+            working_modules.append("Ani-RSS 处理器")
+
+        # 检查媒体处理器
+        if self.media_handler:
+            tmdb_status = "TMDB: 是" if self.tmdb_api_key else "TMDB: 否"
+            working_modules.append(f"媒体处理器 ({tmdb_status})")
+
         logger.info("媒体 Webhook 插件子模块初始化完成:")
-        logger.info("  - Ani-RSS 处理器: 已启用")
-        logger.info(
-            f"  - 媒体处理器: 已启用 (TMDB: {'是' if self.tmdb_api_key else '否'})"
-        )
+        for module in working_modules:
+            logger.info(f"  ✅ {module}: 工作正常")
 
         # 消息队列和缓存
         self.message_queue: list[dict] = []
@@ -119,66 +129,9 @@ class MediaWebhookPlugin(Star):
             logger.info(f"  Content-Type: {headers.get('content-type', 'N/A')}")
             logger.info(f"  请求体长度: {len(body_text)} 字符")
 
-            # 首先检测是否为 Ani-RSS 格式
-            is_ani_rss, ani_rss_data, format_type = (
-                self.ani_rss_handler.detect_ani_rss_format(body_text)
-            )
-
-            if is_ani_rss:
-                logger.info(f"检测到 Ani-RSS 数据，格式类型: {format_type}")
-
-                # 处理 Ani-RSS 数据
-                message_payload = self.ani_rss_handler.process_ani_rss_data(
-                    ani_rss_data, format_type
-                )
-
-                # 验证消息载荷
-                if not self.ani_rss_handler.validate_ani_rss_message(message_payload):
-                    logger.error("Ani-RSS 消息验证失败")
-                    return Response(text="Ani-RSS 消息格式错误", status=400)
-
-                # 检查重复请求
-                if self.is_duplicate_request(ani_rss_data):
-                    logger.info("检测到重复的 Ani-RSS 请求，忽略")
-                    return Response(text="重复请求", status=200)
-
-                # 添加到批量处理器（使用独立发送逻辑）
-                await self.add_ani_rss_to_queue(message_payload)
-                return Response(text="Ani-RSS 消息已加入队列", status=200)
-
-            # 处理非 Ani-RSS 数据（媒体服务器数据）
-            try:
-                raw_data = json.loads(body_text)
-                logger.info("成功解析为标准 JSON 格式")
-            except json.JSONDecodeError as e:
-                logger.error(f"JSON 解析失败: {e}")
-                return Response(text="无效的 JSON 格式", status=400)
-
-            # 检测媒体来源
-            detected_source = self.media_handler.detect_media_source(raw_data, headers)
-            logger.info(f"检测到媒体来源: {detected_source}")
-
-            # 使用媒体处理器处理数据（自动检测来源、转换格式、TMDB 丰富）
-            logger.info("分发到媒体处理器...")
-            media_data = await self.media_handler.process_media_data(
-                raw_data, detected_source, headers
-            )
-
-            # 验证处理结果
-            if not self.media_handler.validate_media_data(
-                media_data.get("media_data", {})
-            ):
-                logger.error("媒体数据验证失败")
-                return Response(text="媒体数据格式错误", status=400)
-
-            # 检查重复请求
-            if self.is_duplicate_request(media_data):
-                logger.info("检测到重复请求，忽略")
-                return Response(text="重复请求", status=200)
-
-            # 添加到队列
-            await self.add_to_queue(media_data)
-            return Response(text="媒体消息已加入队列", status=200)
+            # 将所有数据交由批量处理器检测和处理
+            await self.add_raw_data_to_queue(body_text, headers)
+            return Response(text="数据已加入队列", status=200)
 
         except Exception as e:
             logger.error(f"Webhook 处理出错: {e}")
@@ -301,6 +254,25 @@ class MediaWebhookPlugin(Star):
         except Exception as e:
             logger.error(f"添加消息到队列失败: {e}")
 
+    async def add_raw_data_to_queue(self, body_text: str, headers: dict):
+        """添加原始数据到队列，由批量处理器检测和处理"""
+        try:
+            # 创建原始数据载荷
+            raw_payload = {
+                "raw_data": body_text,
+                "headers": headers,
+                "timestamp": time.time(),
+                "message_type": "raw"  # 标记为原始数据，需要检测
+            }
+
+            # 添加到队列
+            self.message_queue.append(raw_payload)
+
+            logger.info("原始数据已加入队列，等待批量处理器检测")
+
+        except Exception as e:
+            logger.error(f"添加原始数据到队列失败: {e}")
+
     async def add_ani_rss_to_queue(self, message_payload: dict):
         """添加 Ani-RSS 消息到队列（标记为独立发送）"""
         try:
@@ -389,9 +361,112 @@ class MediaWebhookPlugin(Star):
             logger.error(f"❌ Ani-RSS 消息发送失败: {e}")
             logger.debug(f"Ani-RSS 发送失败详情: {e}", exc_info=True)
 
+    async def detect_and_process_raw_data(self, raw_msg: dict) -> dict:
+        """检测和处理原始数据"""
+        try:
+            body_text = raw_msg.get("raw_data", "")
+            headers = raw_msg.get("headers", {})
+
+            # 首先检测是否为 Ani-RSS 格式
+            is_ani_rss, ani_rss_data, format_type = (
+                self.ani_rss_handler.detect_ani_rss_format(body_text)
+            )
+
+            if is_ani_rss:
+                logger.info(f"检测到 Ani-RSS 数据，格式类型: {format_type}")
+
+                # 处理 Ani-RSS 数据
+                message_payload = self.ani_rss_handler.process_ani_rss_data(
+                    ani_rss_data, format_type
+                )
+
+                # 验证消息载荷
+                if not self.ani_rss_handler.validate_ani_rss_message(message_payload):
+                    logger.error("Ani-RSS 消息验证失败")
+                    return None
+
+                # 检查重复请求
+                if self.is_duplicate_request(ani_rss_data):
+                    logger.info("检测到重复的 Ani-RSS 请求，忽略")
+                    return None
+
+                # 标记为 ani-rss 消息
+                message_payload["message_type"] = "ani-rss"
+                return message_payload
+
+            # 处理标准媒体数据
+            try:
+                raw_data = json.loads(body_text)
+                logger.info("检测为标准媒体数据")
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON 解析失败: {e}")
+                return None
+
+            # 检测媒体来源
+            detected_source = self.media_handler.detect_media_source(raw_data, headers)
+            if not detected_source:
+                logger.warning("未识别的媒体数据格式")
+                return None
+
+            logger.info(f"检测到媒体来源: {detected_source}")
+
+            # 使用媒体处理器处理数据
+            media_data = await self.media_handler.process_media_data(
+                raw_data, detected_source, headers
+            )
+
+            # 验证处理结果
+            if not self.media_handler.validate_media_data(
+                media_data.get("media_data", {})
+            ):
+                logger.error("媒体数据验证失败")
+                return None
+
+            # 检查重复请求
+            if self.is_duplicate_request(media_data):
+                logger.info("检测到重复请求，忽略")
+                return None
+
+            # 标记为媒体消息
+            media_data["message_type"] = "media"
+            return media_data
+
+        except Exception as e:
+            logger.error(f"原始数据检测和处理失败: {e}")
+            return None
+
+    async def send_media_messages_intelligently(self, media_messages: list):
+        """智能发送标准媒体消息（根据协议端选择最优发送模式）"""
+        try:
+            platform_lower = self.platform_name.lower()
+            message_count = len(media_messages)
+
+            logger.info(f"智能发送 {message_count} 条媒体消息 [平台: {self.platform_name}]")
+
+            # aiocqhttp 优选 API 发送模式（合并转发）
+            if platform_lower == "aiocqhttp":
+                if message_count >= self.batch_min_size:
+                    logger.info("使用 aiocqhttp API 批量发送模式（合并转发）")
+                    await self.send_batch_messages(media_messages)
+                else:
+                    logger.info("使用 aiocqhttp API 单独发送模式")
+                    await self.send_individual_messages(media_messages)
+
+            # 其他协议端根据消息数量选择
+            else:
+                if message_count >= self.batch_min_size:
+                    logger.info(f"使用 {self.platform_name} 批量发送模式")
+                    await self.send_batch_messages(media_messages)
+                else:
+                    logger.info(f"使用 {self.platform_name} 单独发送模式")
+                    await self.send_individual_messages(media_messages)
+
+        except Exception as e:
+            logger.error(f"智能发送媒体消息失败: {e}")
+
     async def start_batch_processor(self):
-        """启动批量处理器（仅处理标准媒体消息，Ani-RSS独立发送）"""
-        logger.info("启动批量处理器")
+        """启动批量处理器（智能检测和发送所有消息类型）"""
+        logger.info("✅ 批量处理器: 工作正常")
         while True:
             try:
                 await asyncio.sleep(self.batch_interval_seconds)
@@ -416,15 +491,30 @@ class MediaWebhookPlugin(Star):
 
         try:
             # 分离不同类型的消息
+            raw_data_messages = []
             ani_rss_messages = []
             media_messages = []
 
             for msg in messages:
                 msg_type = msg.get("message_type", "media")
-                if msg_type == "ani-rss":
+                if msg_type == "raw":
+                    raw_data_messages.append(msg)
+                elif msg_type == "ani-rss":
                     ani_rss_messages.append(msg)
                 else:
                     media_messages.append(msg)
+
+            # 处理原始数据（检测和转换）
+            if raw_data_messages:
+                logger.info(f"检测和处理 {len(raw_data_messages)} 条原始数据")
+                for raw_msg in raw_data_messages:
+                    processed_msg = await self.detect_and_process_raw_data(raw_msg)
+                    if processed_msg:
+                        # 根据检测结果分类
+                        if processed_msg.get("message_type") == "ani-rss":
+                            ani_rss_messages.append(processed_msg)
+                        else:
+                            media_messages.append(processed_msg)
 
             # 处理 Ani-RSS 消息（独立发送）
             if ani_rss_messages:
@@ -432,17 +522,10 @@ class MediaWebhookPlugin(Star):
                 for msg in ani_rss_messages:
                     await self.send_ani_rss_message_individually(msg)
 
-            # 处理标准媒体消息（批量发送）
+            # 处理标准媒体消息（智能发送）
             if media_messages:
-                logger.info(f"处理 {len(media_messages)} 条标准媒体消息（批量发送）")
-                # 根据消息数量和平台能力选择发送方式
-                if (
-                    len(media_messages) >= self.batch_min_size
-                    and self.platform_name.lower() == "aiocqhttp"
-                ):
-                    await self.send_batch_messages(media_messages)
-                else:
-                    await self.send_individual_messages(media_messages)
+                logger.info(f"处理 {len(media_messages)} 条标准媒体消息（智能发送）")
+                await self.send_media_messages_intelligently(media_messages)
 
         except Exception as e:
             logger.error(f"发送消息失败: {e}")

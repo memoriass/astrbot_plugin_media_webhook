@@ -474,39 +474,4 @@ class MediaHandler:
 
         return "\n".join(sections)
 
-    def validate_media_data(self, media_data: dict) -> bool:
-        """验证媒体数据"""
-        try:
-            # 检查必要字段
-            required_fields = ["item_type"]
-            for field in required_fields:
-                if field not in media_data:
-                    logger.error(f"媒体数据缺少必要字段: {field}")
-                    return False
 
-            # 检查是否有基本的名称信息（确保不是空字符串）
-            series_name = media_data.get("series_name", "").strip()
-            item_name = media_data.get("item_name", "").strip()
-            if not (series_name or item_name):
-                logger.error("媒体数据缺少名称信息")
-                logger.debug(f"series_name: '{series_name}', item_name: '{item_name}'")
-                return False
-
-            return True
-
-        except Exception as e:
-            logger.error(f"媒体数据验证失败: {e}")
-            return False
-
-    def get_processing_stats(self) -> dict:
-        """获取处理统计信息"""
-        stats = {
-            "tmdb_enabled": self.tmdb_enabled,
-            "supported_sources": ["emby", "jellyfin", "plex", "generic"],
-            "supported_types": list(self.media_type_map.keys()),
-        }
-
-        if self.tmdb_enricher:
-            stats["tmdb_cache_stats"] = self.tmdb_enricher.get_cache_stats()
-
-        return stats
