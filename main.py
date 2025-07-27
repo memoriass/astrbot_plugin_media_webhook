@@ -154,10 +154,14 @@ class MediaWebhookPlugin(Star):
                 logger.error(f"JSON 解析失败: {e}")
                 return Response(text="无效的 JSON 格式", status=400)
 
+            # 检测媒体来源
+            detected_source = self.media_handler.detect_media_source(raw_data, headers)
+            logger.info(f"检测到媒体来源: {detected_source}")
+
             # 使用媒体处理器处理数据（自动检测来源、转换格式、TMDB 丰富）
             logger.info("分发到媒体处理器...")
             media_data = await self.media_handler.process_media_data(
-                raw_data, "unknown", headers
+                raw_data, detected_source, headers
             )
 
             # 验证处理结果

@@ -205,6 +205,7 @@ class MediaHandler:
 
             # 1. 转换为标准格式
             media_data = self.convert_to_standard_format(raw_data, source, headers)
+            logger.debug(f"转换后的媒体数据: {media_data}")
 
             if not media_data:
                 logger.warning(f"{source.title()} 数据转换失败")
@@ -241,6 +242,20 @@ class MediaHandler:
                 return self.convert_jellyfin_to_standard(raw_data, headers or {})
             if source == "plex":
                 return self.convert_plex_to_standard(raw_data)
+
+            # 如果来源未知，尝试从数据结构推断
+            if source == "unknown":
+                logger.debug("来源未知，尝试从数据结构推断")
+                if "Item" in raw_data and "Server" in raw_data:
+                    logger.info("从数据结构推断为 Emby 格式")
+                    return self.convert_emby_to_standard(raw_data)
+                elif "ItemType" in raw_data or "SeriesName" in raw_data:
+                    logger.info("从数据结构推断为 Jellyfin 格式")
+                    return self.convert_jellyfin_to_standard(raw_data, headers or {})
+                elif "Metadata" in raw_data or "Player" in raw_data:
+                    logger.info("从数据结构推断为 Plex 格式")
+                    return self.convert_plex_to_standard(raw_data)
+
             # 通用转换
             return self.convert_generic_to_standard(raw_data)
 
@@ -252,10 +267,13 @@ class MediaHandler:
         """将 Emby 数据转换为标准媒体数据格式"""
         try:
             item = data.get("Item", {})
+            logger.debug(f"Emby 原始数据结构: {data}")
+            logger.debug(f"Emby Item 数据: {item}")
 
             # 提取基本信息
             item_type = item.get("Type", "Unknown")
             item_name = item.get("Name", "")
+            logger.debug(f"Emby 提取的基本信息: type={item_type}, name={item_name}")
 
             # 处理剧集信息
             series_name = ""
@@ -287,7 +305,7 @@ class MediaHandler:
                 if server_url and item_id:
                     image_url = f"{server_url}/Items/{item_id}/Images/Primary"
 
-            return {
+            result = {
                 "item_type": item_type,
                 "series_name": series_name,
                 "item_name": item_name,
@@ -299,6 +317,8 @@ class MediaHandler:
                 "image_url": image_url,
                 "source_data": "emby",
             }
+            logger.debug(f"Emby 转换结果: {result}")
+            return result
 
         except Exception as e:
             logger.error(f"转换 Emby 数据失败: {e}")
@@ -508,6 +528,8 @@ class MediaHandler:
     def convert_generic_to_standard(self, data: dict) -> dict:
         """通用数据转换"""
         try:
+            logger.debug(f"通用转换器处理数据: {data}")
+
             # 提取基本信息
             item_type = (
                 data.get("ItemType")
@@ -554,7 +576,7 @@ class MediaHandler:
             # 处理时长
             runtime = data.get("Runtime") or data.get("runtime", "")
 
-            return {
+            result = {
                 "item_type": item_type,
                 "series_name": series_name,
                 "item_name": item_name,
@@ -566,6 +588,8 @@ class MediaHandler:
                 "image_url": data.get("image_url", ""),
                 "source_data": "generic",
             }
+            logger.debug(f"通用转换结果: {result}")
+            return result
 
         except Exception as e:
             logger.error(f"通用数据转换失败: {e}")
@@ -909,9 +933,12 @@ class MediaHandler:
                     logger.error(f"媒体数据缺少必要字段: {field}")
                     return False
 
-            # 检查是否有基本的名称信息
-            if not (media_data.get("series_name") or media_data.get("item_name")):
+            # 检查是否有基本的名称信息（确保不是空字符串）
+            series_name = media_data.get("series_name", "").strip()
+            item_name = media_data.get("item_name", "").strip()
+            if not (series_name or item_name):
                 logger.error("媒体数据缺少名称信息")
+                logger.debug(f"series_name: '{series_name}', item_name: '{item_name}'")
                 return False
 
             return True
