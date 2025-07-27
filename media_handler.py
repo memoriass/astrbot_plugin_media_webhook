@@ -4,21 +4,22 @@
 自动集成 TMDB 数据丰富功能
 """
 
-import html
-import os
-import re
 import time
 from typing import Optional
 
 from astrbot.api import logger
 
 from .tmdb_enricher import TMDBEnricher
+from .processors import ProcessorManager
 
 
 class MediaHandler:
     """媒体处理器 - 处理 Emby、Plex、Jellyfin 等媒体服务器数据"""
 
     def __init__(self, tmdb_api_key: str = "", fanart_api_key: str = ""):
+        # 初始化处理器管理器
+        self.processor_manager = ProcessorManager()
+
         # 初始化 TMDB 丰富器
         if tmdb_api_key:
             self.tmdb_enricher = TMDBEnricher(tmdb_api_key, fanart_api_key)
@@ -29,169 +30,13 @@ class MediaHandler:
             self.tmdb_enabled = False
             logger.info("媒体处理器: 未配置 TMDB API 密钥，跳过数据丰富")
 
-        # 媒体类型映射
-        self.media_type_map = {
-            "Movie": "电影",
-            "Series": "剧集",
-            "Season": "剧季",
-            "Episode": "剧集",
-            "Album": "专辑",
-            "Song": "歌曲",
-            "Video": "视频",
-            "Audio": "音频",
-            "Book": "图书",
-            "AudioBook": "有声书",
-        }
-
-        self.type_emoji_map = {
-            "Movie": "🎬",
-            "Series": "📺",
-            "Season": "📺",
-            "Episode": "📺",
-            "Album": "🎵",
-            "Song": "🎶",
-            "Video": "📹",
-            "Audio": "🎧",
-            "Book": "📚",
-            "AudioBook": "🎧",
-            "Default": "🌟",
-        }
-
     def detect_media_source(self, data: dict, headers: dict) -> str:
-        """检测媒体通知来源（增强版 - 支持 Authorization 特征校验）"""
+        """检测媒体通知来源"""
         try:
-            # 检查 User-Agent 中的特征
-            user_agent = headers.get("user-agent", "").lower()
-
-            # 检查 Authorization 头中的特征
-            authorization = headers.get("authorization", "").lower()
-            auth_type = self.detect_auth_type(authorization)
-
-            logger.debug(
-                f"媒体来源检测: User-Agent={user_agent}, Auth-Type={auth_type}"
-            )
-
-            # 优先检查 User-Agent
-            if "emby server" in user_agent:
-                logger.info("通过 User-Agent 检测到 Emby")
-                return "emby"
-            if "jellyfin" in user_agent:
-                logger.info("通过 User-Agent 检测到 Jellyfin")
-                return "jellyfin"
-            if "plex" in user_agent:
-                logger.info("通过 Plex-Token 检测到 Plex")
-                return "plex"
-
-            # 检查 Authorization 特征
-            if auth_type:
-                if auth_type == "emby":
-                    logger.info("通过 Authorization 检测到 Emby")
-                    return "emby"
-                if auth_type == "jellyfin":
-                    logger.info("通过 Authorization 检测到 Jellyfin")
-                    return "jellyfin"
-                if auth_type == "plex":
-                    logger.info("通过 Authorization 检测到 Plex")
-                    return "plex"
-
-            # 检查数据结构特征
-            if "Item" in data and "Server" in data:
-                logger.info("通过数据结构检测到 Emby")
-                return "emby"
-            if "ItemType" in data or "SeriesName" in data:
-                logger.info("通过数据结构检测到 Jellyfin")
-                return "jellyfin"
-            if "Metadata" in data or "Player" in data:
-                logger.info("通过数据结构检测到 Plex")
-                return "plex"
-
-            # 检查其他请求头特征
-            source_from_headers = self.detect_source_from_headers(headers)
-            if source_from_headers != "unknown":
-                logger.info(f"通过请求头特征检测到 {source_from_headers}")
-                return source_from_headers
-
-            logger.warning("无法确定媒体来源，返回 unknown")
-            return "unknown"
-
+            return self.processor_manager.detect_source(data, headers)
         except Exception as e:
-            logger.error(f"检测媒体来源失败: {e}")
-            return "unknown"
-
-    def detect_auth_type(self, authorization: str) -> str:
-        """从 Authorization 头检测媒体服务器类型"""
-        try:
-            if not authorization:
-                return ""
-
-            # Emby 通常使用 MediaBrowser 或 Emby 作为认证前缀
-            if "mediabrowser" in authorization or "emby" in authorization:
-                return "emby"
-
-            # Jellyfin 通常使用 MediaBrowser 或 Jellyfin 作为认证前缀
-            if "jellyfin" in authorization:
-                return "jellyfin"
-
-            # Plex 使用 X-Plex-Token 或在 Authorization 中包含 plex
-            if "plex" in authorization or "x-plex-token" in authorization:
-                return "plex"
-
-            # 检查 Bearer token 格式
-            if authorization.startswith("bearer "):
-                # 可以根据 token 格式进一步判断
-                token = authorization[7:]  # 去掉 "bearer " 前缀
-                if len(token) == 32:  # Emby/Jellyfin 通常是32位
-                    return "jellyfin"  # 默认返回 jellyfin，因为格式相似
-
-            return ""
-
-        except Exception as e:
-            logger.error(f"检测 Authorization 类型失败: {e}")
-            return ""
-
-    def detect_source_from_headers(self, headers: dict) -> str:
-        """从其他请求头检测媒体服务器类型"""
-        try:
-            # 检查 X-Plex-Token 头（Plex 特有）
-            if headers.get("x-plex-token"):
-                return "plex"
-
-            # 检查 X-Emby-Token 头（Emby 特有）
-            if headers.get("x-emby-token"):
-                return "emby"
-
-            # 检查 X-MediaBrowser-Token 头（Emby/Jellyfin 共用）
-            if headers.get("x-mediabrowser-token"):
-                # 需要结合其他信息判断是 Emby 还是 Jellyfin
-                user_agent = headers.get("user-agent", "").lower()
-                if "emby" in user_agent:
-                    return "emby"
-                if "jellyfin" in user_agent:
-                    return "jellyfin"
-                return "jellyfin"  # 默认返回 jellyfin
-
-            # 检查 Content-Type 中的特征
-            content_type = headers.get("content-type", "").lower()
-            if "application/json" in content_type:
-                # 检查其他可能的特征头
-                if headers.get("x-forwarded-for"):
-                    # 可能是通过代理的请求，检查更多特征
-                    pass
-
-            # 检查 Referer 头中的特征
-            referer = headers.get("referer", "").lower()
-            if "emby" in referer:
-                return "emby"
-            if "jellyfin" in referer:
-                return "jellyfin"
-            if "plex" in referer:
-                return "plex"
-
-            return "unknown"
-
-        except Exception as e:
-            logger.error(f"从请求头检测媒体来源失败: {e}")
-            return "unknown"
+            logger.error(f"媒体来源检测失败: {e}")
+            return "generic"
 
     async def process_media_data(
         self, raw_data: dict, source: str, headers: dict
@@ -236,385 +81,33 @@ class MediaHandler:
     ) -> dict:
         """将不同来源的数据转换为标准格式"""
         try:
-            if source == "emby":
-                return self.convert_emby_to_standard(raw_data)
-            if source == "jellyfin":
-                return self.convert_jellyfin_to_standard(raw_data, headers or {})
-            if source == "plex":
-                return self.convert_plex_to_standard(raw_data)
-
-            # 如果来源未知，尝试从数据结构推断
-            if source == "unknown":
-                logger.debug("来源未知，尝试从数据结构推断")
-                if "Item" in raw_data and "Server" in raw_data:
-                    logger.info("从数据结构推断为 Emby 格式")
-                    return self.convert_emby_to_standard(raw_data)
-                elif "ItemType" in raw_data or "SeriesName" in raw_data:
-                    logger.info("从数据结构推断为 Jellyfin 格式")
-                    return self.convert_jellyfin_to_standard(raw_data, headers or {})
-                elif "Metadata" in raw_data or "Player" in raw_data:
-                    logger.info("从数据结构推断为 Plex 格式")
-                    return self.convert_plex_to_standard(raw_data)
-
-            # 通用转换
-            return self.convert_generic_to_standard(raw_data)
+            return self.processor_manager.convert_to_standard(raw_data, source, headers)
 
         except Exception as e:
             logger.error(f"转换 {source.title()} 数据格式失败: {e}")
             return {}
 
-    def convert_emby_to_standard(self, data: dict) -> dict:
-        """将 Emby 数据转换为标准媒体数据格式"""
+    def validate_media_data(self, media_data: dict) -> bool:
+        """验证媒体数据"""
         try:
-            item = data.get("Item", {})
-            logger.debug(f"Emby 原始数据结构: {data}")
-            logger.debug(f"Emby Item 数据: {item}")
-
-            # 提取基本信息
-            item_type = item.get("Type", "Unknown")
-            item_name = item.get("Name", "")
-            logger.debug(f"Emby 提取的基本信息: type={item_type}, name={item_name}")
-
-            # 处理剧集信息
-            series_name = ""
-            season_number = ""
-            episode_number = ""
-
-            if item_type == "Episode":
-                series_name = item.get("SeriesName", "")
-                season_number = item.get("ParentIndexNumber", "")
-                episode_number = item.get("IndexNumber", "")
-            elif item_type == "Season":
-                series_name = item.get("SeriesName", "")
-                season_number = item.get("IndexNumber", "")
-            elif item_type == "Series":
-                series_name = item_name
-
-            # 提取其他信息
-            year = item.get("ProductionYear", "")
-            overview = item.get("Overview", "")
-            runtime_ticks = item.get("RunTimeTicks", 0)
-            # Emby的RunTimeTicks是以100纳秒为单位，需要转换为分钟
-            # 1秒 = 10,000,000 ticks，1分钟 = 600,000,000 ticks
-            try:
-                if runtime_ticks and isinstance(runtime_ticks, (int, float)) and runtime_ticks > 0:
-                    runtime_minutes = int(runtime_ticks // 600000000)
-                    if runtime_minutes > 0:
-                        runtime = f"{runtime_minutes}分钟"
-                    else:
-                        runtime = ""
-                else:
-                    runtime = ""
-            except (TypeError, ValueError, ZeroDivisionError) as e:
-                logger.debug(f"时长转换失败: {e}, runtime_ticks={runtime_ticks}")
-                runtime = ""
-
-            # 提取图片信息
-            image_url = ""
-            if item.get("ImageTags", {}).get("Primary"):
-                server_info = data.get("Server", {})
-                server_url = server_info.get("Url", "")
-                item_id = item.get("Id", "")
-                if server_url and item_id:
-                    image_url = f"{server_url}/Items/{item_id}/Images/Primary"
-
-            result = {
-                "item_type": item_type,
-                "series_name": series_name,
-                "item_name": item_name,
-                "season_number": str(season_number) if season_number else "",
-                "episode_number": str(episode_number) if episode_number else "",
-                "year": str(year) if year else "",
-                "overview": overview,
-                "runtime": runtime,
-                "image_url": image_url,
-                "source_data": "emby",
-            }
-            logger.debug(f"Emby 转换结果: {result}")
-            return result
-
+            # 使用处理器管理器的验证功能
+            processor = self.processor_manager.get_processor("generic")
+            return processor.validate_standard_data(media_data)
         except Exception as e:
-            logger.error(f"转换 Emby 数据失败: {e}")
-            return {}
+            logger.error(f"媒体数据验证失败: {e}")
+            return False
 
-    def convert_jellyfin_to_standard(
-        self, data: dict, headers: Optional[dict] = None
-    ) -> dict:
-        """将 Jellyfin 数据转换为标准格式（优化版）"""
-        try:
-            # 基本类型
-            item_type = data.get("Type", "Episode")
+    def get_processing_stats(self) -> dict:
+        """获取处理统计信息"""
+        stats = {
+            "tmdb_enabled": self.tmdb_enabled,
+            "processor_info": self.processor_manager.get_processor_info()
+        }
 
-            # 剧集和集名称处理
-            item_name = data.get("Name", "")
-            series_name = ""
+        if self.tmdb_enricher:
+            stats["tmdb_cache_stats"] = self.tmdb_enricher.get_cache_stats()
 
-            # 优先从 SeriesName 获取，如果没有则从文件路径提取
-            if data.get("SeriesName"):
-                series_name = data.get("SeriesName")
-            elif data.get("Path"):
-                # 从文件路径提取剧集名称
-                file_name = os.path.basename(data.get("Path", ""))
-                if " - " in file_name:
-                    # 假设格式为 "剧集名 - 集号 .扩展名"
-                    potential_series = file_name.split(" - ")[0]
-                    series_name = potential_series
-
-            # 如果还是没有，使用 Name 作为剧集名称
-            if not series_name:
-                series_name = item_name
-
-            # 季集号处理
-            season_number = ""
-            episode_number = str(
-                data.get("IndexNumber", "")
-            )  # 使用 IndexNumber 而不是 EpisodeNumber
-
-            # 从 SeasonName 提取季号
-            season_name = data.get("SeasonName", "")
-            if season_name and season_name != "Season Unknown":
-                # 尝试从 SeasonName 提取数字
-                season_match = re.search(r"Season (\d+)", season_name)
-                if season_match:
-                    season_number = season_match.group(1)
-                else:
-                    # 如果没有匹配到，尝试其他格式
-                    season_match = re.search(r"第(\d+)季", season_name)
-                    if season_match:
-                        season_number = season_match.group(1)
-
-            # 如果季号还是空，尝试从文件路径提取
-            if not season_number and data.get("Path"):
-                file_name = os.path.basename(data.get("Path", ""))
-                # 尝试匹配 S01E01 格式
-                season_episode_match = re.search(
-                    r"S(\d+)E(\d+)", file_name, re.IGNORECASE
-                )
-                if season_episode_match:
-                    season_number = season_episode_match.group(1)
-                    if not episode_number:
-                        episode_number = season_episode_match.group(2)
-
-            # 处理年份
-            year = str(data.get("ProductionYear", ""))
-
-            # 处理简介
-            overview = data.get("Overview", "")
-
-            # 处理时长
-            runtime = ""
-            runtime_ticks = data.get("RunTimeTicks", 0)
-            try:
-                if runtime_ticks and isinstance(runtime_ticks, (int, float)) and runtime_ticks > 0:
-                    runtime_minutes = int(runtime_ticks // 600000000)
-                    if runtime_minutes > 0:
-                        runtime = f"{runtime_minutes}分钟"
-                    else:
-                        runtime = ""
-                else:
-                    runtime = ""
-            except (TypeError, ValueError, ZeroDivisionError) as e:
-                logger.debug(f"Jellyfin时长转换失败: {e}, runtime_ticks={runtime_ticks}")
-                runtime = ""
-
-            # 图片 URL 构建
-            server_url = ""
-            if headers:
-                server_url = self.extract_jellyfin_server_url(headers)
-            image_url = self.build_jellyfin_image_url(data, server_url)
-
-            return {
-                "item_type": item_type,
-                "series_name": series_name,
-                "item_name": item_name,
-                "season_number": season_number,
-                "episode_number": episode_number,
-                "year": year,
-                "overview": overview,
-                "runtime": runtime,
-                "image_url": image_url,
-                "source_data": "jellyfin",
-                "jellyfin_id": data.get("Id", ""),
-                "jellyfin_server_id": data.get("ServerId", ""),
-            }
-
-        except Exception as e:
-            logger.error(f"转换 Jellyfin 数据失败: {e}")
-            return {}
-
-    def build_jellyfin_image_url(self, data: dict, server_url: str = "") -> str:
-        """构建 Jellyfin 图片 URL"""
-        try:
-            # 检查是否有图片标签
-            image_tags = data.get("ImageTags", {})
-            if not image_tags.get("Primary"):
-                return ""
-
-            item_id = data.get("Id", "")
-            if not item_id:
-                return ""
-
-            image_tag = image_tags["Primary"]
-
-            # 如果没有提供服务器 URL，返回相对路径格式
-            if not server_url:
-                # 返回相对路径，可以在后续处理中替换
-                image_url = f"/Items/{item_id}/Images/Primary?tag={image_tag}"
-                logger.debug(f"构建 Jellyfin 相对图片 URL: {image_url}")
-                return image_url
-
-            # 构建完整的图片 URL
-            # 确保服务器 URL 不以 / 结尾
-            server_url = server_url.rstrip("/")
-            image_url = f"{server_url}/Items/{item_id}/Images/Primary?tag={image_tag}"
-
-            logger.debug(f"构建 Jellyfin 完整图片 URL: {image_url}")
-            return image_url
-
-        except Exception as e:
-            logger.error(f"构建 Jellyfin 图片 URL 失败: {e}")
-            return ""
-
-    def extract_jellyfin_server_url(self, headers: dict) -> str:
-        """从请求头中提取 Jellyfin 服务器 URL"""
-        try:
-            # 尝试从常见的请求头中提取服务器信息
-            host = headers.get("host", "")
-            x_forwarded_host = headers.get("x-forwarded-host", "")
-
-            # 优先使用 x-forwarded-host，然后是 host
-            server_host = x_forwarded_host or host
-
-            if server_host:
-                # 检查是否包含端口
-                if ":" in server_host:
-                    # 假设是 HTTP，实际使用时可能需要检测 HTTPS
-                    server_url = f"http://{server_host}"
-                else:
-                    # 默认端口
-                    server_url = f"http://{server_host}:8096"
-
-                logger.debug(f"提取到 Jellyfin 服务器 URL: {server_url}")
-                return server_url
-
-            return ""
-
-        except Exception as e:
-            logger.error(f"提取 Jellyfin 服务器 URL 失败: {e}")
-            return ""
-
-    def convert_plex_to_standard(self, data: dict) -> dict:
-        """将 Plex 数据转换为标准格式"""
-        try:
-            # Plex 通常在 Metadata 字段中包含信息
-            metadata = data.get("Metadata", {})
-
-            item_type = metadata.get("type", "episode").title()
-            if item_type.lower() == "episode":
-                item_type = "Episode"
-            elif item_type.lower() == "movie":
-                item_type = "Movie"
-            elif item_type.lower() == "show":
-                item_type = "Series"
-
-            # 提取信息
-            series_name = metadata.get("grandparentTitle", "")
-            item_name = metadata.get("title", "")
-            season_number = str(metadata.get("parentIndex", ""))
-            episode_number = str(metadata.get("index", ""))
-            year = str(metadata.get("year", ""))
-            overview = metadata.get("summary", "")
-
-            # Plex 时长通常以毫秒为单位
-            duration = metadata.get("duration", 0)
-            runtime = f"{duration // 60000}分钟" if duration > 0 else ""
-
-            return {
-                "item_type": item_type,
-                "series_name": series_name,
-                "item_name": item_name,
-                "season_number": season_number,
-                "episode_number": episode_number,
-                "year": year,
-                "overview": overview,
-                "runtime": runtime,
-                "image_url": "",  # Plex 图片需要特殊处理
-                "source_data": "plex",
-            }
-
-        except Exception as e:
-            logger.error(f"转换 Plex 数据失败: {e}")
-            return {}
-
-    def convert_generic_to_standard(self, data: dict) -> dict:
-        """通用数据转换"""
-        try:
-            logger.debug(f"通用转换器处理数据: {data}")
-
-            # 提取基本信息
-            item_type = (
-                data.get("ItemType")
-                or data.get("Type")
-                or data.get("item_type", "Episode")
-            )
-
-            # 处理剧集名称
-            series_name = (
-                data.get("SeriesName")
-                or data.get("series_name")
-                or data.get("Name")
-                or data.get("name", "")
-            )
-
-            # 处理集名称
-            item_name = (
-                data.get("Name")
-                or data.get("name")
-                or data.get("ItemName")
-                or data.get("item_name", "")
-            )
-
-            # 处理季集号
-            season_number = str(
-                data.get("SeasonNumber") or data.get("season_number", "")
-            )
-            episode_number = str(
-                data.get("EpisodeNumber") or data.get("episode_number", "")
-            )
-
-            # 处理年份
-            year = str(
-                data.get("Year") or data.get("year") or data.get("ProductionYear", "")
-            )
-
-            # 处理简介
-            overview = (
-                data.get("Overview")
-                or data.get("overview")
-                or data.get("Description", "")
-            )
-
-            # 处理时长
-            runtime = data.get("Runtime") or data.get("runtime", "")
-
-            result = {
-                "item_type": item_type,
-                "series_name": series_name,
-                "item_name": item_name,
-                "season_number": season_number,
-                "episode_number": episode_number,
-                "year": year,
-                "overview": overview,
-                "runtime": runtime,
-                "image_url": data.get("image_url", ""),
-                "source_data": "generic",
-            }
-            logger.debug(f"通用转换结果: {result}")
-            return result
-
-        except Exception as e:
-            logger.error(f"通用数据转换失败: {e}")
-            return {}
+        return stats
 
     def create_message_payload(self, media_data: dict, source: str) -> dict:
         """创建标准消息载荷（避免图片重复显示）"""
@@ -679,8 +172,9 @@ class MediaHandler:
         """生成消息文本（紧凑排列优化 + 首行图片）"""
         try:
             item_type = data.get("item_type", "")
-            cn_type = self.media_type_map.get(item_type, item_type)
-            emoji = self.type_emoji_map.get(item_type, self.type_emoji_map["Default"])
+            # 使用处理器的类型映射
+            processor = self.processor_manager.get_processor("generic")
+            cn_type = processor.get_media_type_display(item_type)
 
             message_parts = []
 
@@ -693,7 +187,7 @@ class MediaHandler:
                     message_parts.append(image_line)
 
             # 生成标题
-            title = self.generate_title_by_type(item_type, cn_type, emoji, "上线", data)
+            title = self.generate_title_by_type(item_type, cn_type, "上线", data)
             message_parts.append(title)
 
             # 主要信息（紧凑排列）
@@ -820,32 +314,32 @@ class MediaHandler:
             return "unknown"
 
     def generate_title_by_type(
-        self, item_type: str, cn_type: str, emoji: str, action: str, data: dict
+        self, item_type: str, cn_type: str, action: str, data: dict
     ) -> str:
         """根据媒体类型生成合适的标题"""
         if item_type == "Movie":
-            return f"{emoji} 新电影{action}"
+            return f"新电影{action}"
         if item_type in ["Series", "Season"]:
-            return f"{emoji} 剧集{action}"
+            return f"剧集{action}"
         if item_type == "Episode":
             # 对于剧集，显示更具体的信息
             season_num = data.get("season_number", "")
             episode_num = data.get("episode_number", "")
             if season_num and episode_num:
-                return f"{emoji} 新剧集{action}"
-            return f"{emoji} 剧集{action}"
+                return f"新剧集{action}"
+            return f"剧集{action}"
         if item_type == "Album":
-            return f"{emoji} 新专辑{action}"
+            return f"新专辑{action}"
         if item_type == "Song":
-            return f"{emoji} 新歌曲{action}"
+            return f"新歌曲{action}"
         if item_type == "Video":
-            return f"{emoji} 新视频{action}"
+            return f"新视频{action}"
         if item_type in ["Audio", "AudioBook"]:
-            return f"{emoji} 新音频{action}"
+            return f"新音频{action}"
         if item_type == "Book":
-            return f"{emoji} 新图书{action}"
+            return f"新图书{action}"
         # 默认格式
-        return f"{emoji} 新{cn_type}{action}"
+        return f"新{cn_type}{action}"
 
     def get_first_paragraph(self, text: str) -> str:
         """获取文本的第一段"""

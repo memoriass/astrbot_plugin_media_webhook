@@ -11,7 +11,7 @@ from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.star import Context, Star, register
 
-from .ani_rss_handler import AniRSSHandler
+from .processors import AniRSSHandler
 from .media_handler import MediaHandler
 
 
@@ -366,15 +366,28 @@ class MediaWebhookPlugin(Star):
         try:
             # 获取协议端bot实例
             bot_client = None
+            platform_instance = None
             for platform in self.context.platform_manager.platform_insts:
-                if platform.meta().name == self.platform_name:
+                platform_meta = platform.meta()
+                logger.debug(f"检查平台: {platform_meta.name}")
+                if platform_meta.name == self.platform_name:
                     bot_client = platform.get_client()
+                    platform_instance = platform
                     break
 
             if not bot_client:
                 logger.error(f"未找到 {self.platform_name} 平台实例")
-                await self.send_individual_messages(messages)
-                return
+                logger.info("尝试使用第一个可用的平台实例")
+                # 尝试使用第一个可用的平台
+                if self.context.platform_manager.platform_insts:
+                    platform_instance = self.context.platform_manager.platform_insts[0]
+                    bot_client = platform_instance.get_client()
+                    logger.info(f"使用平台: {platform_instance.meta().name}")
+
+                if not bot_client:
+                    logger.error("没有可用的平台实例")
+                    await self.send_individual_messages(messages)
+                    return
 
             # 构建NapCat格式的合并转发消息
             forward_messages = []
@@ -411,16 +424,28 @@ class MediaWebhookPlugin(Star):
                 }
                 forward_messages.append(node)
 
-            # 调用NapCat的合并转发API
-            payload = {
-                "group_id": int(group_id),
-                "messages": forward_messages,
-                "prompt": "媒体通知合并转发",
-                "summary": f"共{len(messages)}条媒体通知",
-                "source": "AstrBot媒体通知插件"
-            }
+            # 尝试不同的合并转发API
+            platform_name = platform_instance.meta().name if platform_instance else "unknown"
+            logger.debug(f"使用平台: {platform_name}")
 
-            result = await bot_client.call_action("send_group_forward_msg", **payload)
+            # 构建合并转发消息
+            if platform_name in ["aiocqhttp", "napcat", "onebot"]:
+                # OneBot协议的合并转发
+                payload = {
+                    "group_id": int(group_id),
+                    "messages": forward_messages
+                }
+                result = await bot_client.call_action("send_group_forward_msg", **payload)
+            else:
+                # 其他协议，尝试通用的合并转发
+                payload = {
+                    "group_id": int(group_id),
+                    "messages": forward_messages,
+                    "prompt": "媒体通知合并转发",
+                    "summary": f"共{len(messages)}条媒体通知"
+                }
+                result = await bot_client.call_action("send_group_forward_msg", **payload)
+
             logger.info(f"✅ 成功发送 {len(forward_messages)} 条合并转发消息，消息ID: {result.get('message_id', 'N/A')}")
 
         except Exception as e:

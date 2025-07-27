@@ -64,5 +64,17 @@
     "type": "string",
     "hint": "用于获取剧集详细信息的 TMDB API 密钥，支持 Jellyfin/Emby/Plex 数据丰富，留空则跳过 TMDB 查询",
     "default": ""
+  },
+  "fanart_api_key": {
+    "description": "Fanart.tv API Key",
+    "type": "string",
+    "hint": "用于获取高质量海报和背景图的 Fanart.tv API 密钥，作为 TMDB 图片的降级选项，留空则跳过 Fanart 查询",
+    "default": ""
+  },
+  "enable_image_fallback": {
+    "description": "启用图片降级获取",
+    "type": "bool",
+    "hint": "当原始数据无图片时，是否尝试从 TMDB 和 Fanart.tv 获取图片",
+    "default": true
   }
 }
