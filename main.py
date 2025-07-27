@@ -142,7 +142,7 @@ class MediaWebhookPlugin(Star):
                     logger.info("检测到重复的 Ani-RSS 请求，忽略")
                     return Response(text="重复请求", status=200)
 
-                # 直接添加到队列（不进行 TMDB 丰富）
+                # 添加到批量处理器（使用独立发送逻辑）
                 await self.add_ani_rss_to_queue(message_payload)
                 return Response(text="Ani-RSS 消息已加入队列", status=200)
 
@@ -279,8 +279,11 @@ class MediaWebhookPlugin(Star):
             logger.debug(f"清理了 {len(expired_keys)} 个过期缓存条目")
 
     async def add_to_queue(self, message_payload: dict):
-        """添加消息载荷到队列（通用方法）"""
+        """添加标准媒体消息到队列"""
         try:
+            # 标记为标准媒体消息，使用批量发送逻辑
+            message_payload["message_type"] = "media"
+
             # 添加时间戳（如果没有）
             if "timestamp" not in message_payload:
                 message_payload["timestamp"] = time.time()
@@ -299,8 +302,11 @@ class MediaWebhookPlugin(Star):
             logger.error(f"添加消息到队列失败: {e}")
 
     async def add_ani_rss_to_queue(self, message_payload: dict):
-        """添加 Ani-RSS 消息到队列"""
+        """添加 Ani-RSS 消息到队列（标记为独立发送）"""
         try:
+            # 标记为 ani-rss 消息，使用独立发送逻辑
+            message_payload["message_type"] = "ani-rss"
+
             # 添加时间戳
             message_payload["timestamp"] = time.time()
 
@@ -317,8 +323,74 @@ class MediaWebhookPlugin(Star):
         except Exception as e:
             logger.error(f"添加 Ani-RSS 消息到队列失败: {e}")
 
+    async def send_ani_rss_message_directly(self, message_payload: dict):
+        """直接发送 Ani-RSS 消息（独立处理，不进入批量处理器）"""
+        try:
+            group_id = str(self.group_id).replace(":", "_")
+            unified_msg_origin = f"{self.platform_name}:GroupMessage:{group_id}"
+
+            # 记录日志
+            has_image = bool(message_payload.get("image_url"))
+            format_type = message_payload.get("format_type", "unknown")
+            logger.info(
+                f"直接发送 Ani-RSS 消息 [格式: {format_type}] {'(含图片)' if has_image else '(无图片)'}"
+            )
+
+            content_list = []
+
+            # 添加图片（如果有）
+            if message_payload.get("image_url"):
+                content_list.append(Comp.Image.fromURL(message_payload["image_url"]))
+
+            # 添加文本
+            content_list.append(Comp.Plain(message_payload["message_text"]))
+
+            # 创建消息链
+            message_chain = MessageChain(content_list)
+
+            # 直接发送消息
+            await self.context.send_message(unified_msg_origin, message_chain)
+            logger.info("✅ Ani-RSS 消息发送成功")
+
+        except Exception as e:
+            logger.error(f"❌ Ani-RSS 消息发送失败: {e}")
+            logger.debug(f"Ani-RSS 发送失败详情: {e}", exc_info=True)
+
+    async def send_ani_rss_message_individually(self, message_payload: dict):
+        """在批量处理器中独立发送单条 Ani-RSS 消息"""
+        try:
+            group_id = str(self.group_id).replace(":", "_")
+            unified_msg_origin = f"{self.platform_name}:GroupMessage:{group_id}"
+
+            # 记录日志
+            has_image = bool(message_payload.get("image_url"))
+            format_type = message_payload.get("format_type", "unknown")
+            logger.debug(
+                f"独立发送 Ani-RSS 消息 [格式: {format_type}] {'(含图片)' if has_image else '(无图片)'}"
+            )
+
+            content_list = []
+
+            # 添加图片（如果有）
+            if message_payload.get("image_url"):
+                content_list.append(Comp.Image.fromURL(message_payload["image_url"]))
+
+            # 添加文本
+            content_list.append(Comp.Plain(message_payload["message_text"]))
+
+            # 创建消息链
+            message_chain = MessageChain(content_list)
+
+            # 发送消息
+            await self.context.send_message(unified_msg_origin, message_chain)
+            logger.debug("✅ Ani-RSS 消息发送成功")
+
+        except Exception as e:
+            logger.error(f"❌ Ani-RSS 消息发送失败: {e}")
+            logger.debug(f"Ani-RSS 发送失败详情: {e}", exc_info=True)
+
     async def start_batch_processor(self):
-        """启动批量处理器"""
+        """启动批量处理器（仅处理标准媒体消息，Ani-RSS独立发送）"""
         logger.info("启动批量处理器")
         while True:
             try:
@@ -329,7 +401,7 @@ class MediaWebhookPlugin(Star):
                 await asyncio.sleep(10)
 
     async def process_message_queue(self):
-        """处理消息队列"""
+        """处理消息队列（根据消息类型使用不同发送逻辑）"""
         if not self.message_queue:
             return
 
@@ -343,14 +415,34 @@ class MediaWebhookPlugin(Star):
         logger.info(f"从队列中取出 {len(messages)} 条待发消息")
 
         try:
-            # 根据消息数量和平台能力选择发送方式
-            if (
-                len(messages) >= self.batch_min_size
-                and self.platform_name.lower() == "aiocqhttp"
-            ):
-                await self.send_batch_messages(messages)
-            else:
-                await self.send_individual_messages(messages)
+            # 分离不同类型的消息
+            ani_rss_messages = []
+            media_messages = []
+
+            for msg in messages:
+                msg_type = msg.get("message_type", "media")
+                if msg_type == "ani-rss":
+                    ani_rss_messages.append(msg)
+                else:
+                    media_messages.append(msg)
+
+            # 处理 Ani-RSS 消息（独立发送）
+            if ani_rss_messages:
+                logger.info(f"处理 {len(ani_rss_messages)} 条 Ani-RSS 消息（独立发送）")
+                for msg in ani_rss_messages:
+                    await self.send_ani_rss_message_individually(msg)
+
+            # 处理标准媒体消息（批量发送）
+            if media_messages:
+                logger.info(f"处理 {len(media_messages)} 条标准媒体消息（批量发送）")
+                # 根据消息数量和平台能力选择发送方式
+                if (
+                    len(media_messages) >= self.batch_min_size
+                    and self.platform_name.lower() == "aiocqhttp"
+                ):
+                    await self.send_batch_messages(media_messages)
+                else:
+                    await self.send_individual_messages(media_messages)
 
         except Exception as e:
             logger.error(f"发送消息失败: {e}")
