@@ -358,40 +358,74 @@ class MediaWebhookPlugin(Star):
             self.last_batch_time = time.time()
 
     async def send_batch_messages(self, messages: list[dict]):
-        """发送合并转发消息（仅 aiocqhttp）"""
+        """发送合并转发消息（直接调用协议端API）"""
         group_id = str(self.group_id).replace(":", "_")
-        unified_msg_origin = f"{self.platform_name}:GroupMessage:{group_id}"
 
         logger.info(f"发送合并转发: {len(messages)} 条消息")
 
         try:
-            # 构建合并转发节点
-            forward_nodes = []
+            # 获取协议端bot实例
+            bot_client = None
+            for platform in self.context.platform_manager.platform_insts:
+                if platform.meta().name == self.platform_name:
+                    bot_client = platform.get_client()
+                    break
+
+            if not bot_client:
+                logger.error(f"未找到 {self.platform_name} 平台实例")
+                await self.send_individual_messages(messages)
+                return
+
+            # 构建NapCat格式的合并转发消息
+            forward_messages = []
             for msg in messages:
-                content_list = []
+                # 构建消息内容
+                content = []
 
                 # 添加图片
                 if msg.get("image_url"):
-                    content_list.append(Comp.Image.fromURL(msg["image_url"]))
+                    content.append({
+                        "type": "image",
+                        "data": {
+                            "file": msg["image_url"]
+                        }
+                    })
 
                 # 添加文本
-                content_list.append(Comp.Plain(msg["message_text"]))
+                if msg.get("message_text"):
+                    content.append({
+                        "type": "text",
+                        "data": {
+                            "text": msg["message_text"]
+                        }
+                    })
 
                 # 创建转发节点
-                node = Comp.Node(
-                    uin="2659908767",
-                    name="媒体通知",
-                    content=content_list,  # 可配置
-                )
-                forward_nodes.append(node)
+                node = {
+                    "type": "node",
+                    "data": {
+                        "user_id": "2659908767",  # 可配置的发送者ID
+                        "nickname": "媒体通知",    # 可配置的发送者昵称
+                        "content": content
+                    }
+                }
+                forward_messages.append(node)
 
-            # 创建合并转发消息链
-            forward_chain = MessageChain(forward_nodes)
-            await self.context.send_message(unified_msg_origin, forward_chain)
-            logger.info(f"✅ 成功发送 {len(forward_nodes)} 条合并转发消息")
+            # 调用NapCat的合并转发API
+            payload = {
+                "group_id": int(group_id),
+                "messages": forward_messages,
+                "prompt": "媒体通知合并转发",
+                "summary": f"共{len(messages)}条媒体通知",
+                "source": "AstrBot媒体通知插件"
+            }
+
+            result = await bot_client.call_action("send_group_forward_msg", **payload)
+            logger.info(f"✅ 成功发送 {len(forward_messages)} 条合并转发消息，消息ID: {result.get('message_id', 'N/A')}")
 
         except Exception as e:
             logger.error(f"发送合并转发失败: {e}")
+            logger.debug(f"合并转发失败详情: {e}", exc_info=True)
             # 回退到单独发送
             await self.send_individual_messages(messages)
 

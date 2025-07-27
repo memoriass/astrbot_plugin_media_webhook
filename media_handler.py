@@ -294,7 +294,20 @@ class MediaHandler:
             year = item.get("ProductionYear", "")
             overview = item.get("Overview", "")
             runtime_ticks = item.get("RunTimeTicks", 0)
-            runtime = f"{runtime_ticks // 600000000}分钟" if runtime_ticks > 0 else ""
+            # Emby的RunTimeTicks是以100纳秒为单位，需要转换为分钟
+            # 1秒 = 10,000,000 ticks，1分钟 = 600,000,000 ticks
+            try:
+                if runtime_ticks and isinstance(runtime_ticks, (int, float)) and runtime_ticks > 0:
+                    runtime_minutes = int(runtime_ticks // 600000000)
+                    if runtime_minutes > 0:
+                        runtime = f"{runtime_minutes}分钟"
+                    else:
+                        runtime = ""
+                else:
+                    runtime = ""
+            except (TypeError, ValueError, ZeroDivisionError) as e:
+                logger.debug(f"时长转换失败: {e}, runtime_ticks={runtime_ticks}")
+                runtime = ""
 
             # 提取图片信息
             image_url = ""
@@ -390,11 +403,19 @@ class MediaHandler:
 
             # 处理时长
             runtime = ""
-            if data.get("RunTimeTicks"):
-                runtime_ticks = data.get("RunTimeTicks", 0)
-                runtime = (
-                    f"{runtime_ticks // 600000000}分钟" if runtime_ticks > 0 else ""
-                )
+            runtime_ticks = data.get("RunTimeTicks", 0)
+            try:
+                if runtime_ticks and isinstance(runtime_ticks, (int, float)) and runtime_ticks > 0:
+                    runtime_minutes = int(runtime_ticks // 600000000)
+                    if runtime_minutes > 0:
+                        runtime = f"{runtime_minutes}分钟"
+                    else:
+                        runtime = ""
+                else:
+                    runtime = ""
+            except (TypeError, ValueError, ZeroDivisionError) as e:
+                logger.debug(f"Jellyfin时长转换失败: {e}, runtime_ticks={runtime_ticks}")
+                runtime = ""
 
             # 图片 URL 构建
             server_url = ""
