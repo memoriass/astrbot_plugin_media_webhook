@@ -49,15 +49,17 @@ class LLOneBotAdapter(BaseAdapter):
             # 构建 LLOneBot 格式的请求参数
             if kwargs.get("user_id"):
                 # 私聊合并转发
-                payload = {"user_id": int(kwargs["user_id"]), "messages": forward_nodes}
-                result = await bot_client.call_action(
-                    "send_private_forward_msg", **payload
+                result = await bot_client.api.call_action(
+                    "send_private_forward_msg",
+                    user_id=int(kwargs["user_id"]),
+                    messages=forward_nodes,
                 )
             else:
                 # 群聊合并转发
-                payload = {"group_id": int(group_id), "messages": forward_nodes}
-                result = await bot_client.call_action(
-                    "send_group_forward_msg", **payload
+                result = await bot_client.api.call_action(
+                    "send_group_forward_msg",
+                    group_id=int(group_id),
+                    messages=forward_nodes,
                 )
 
             # 处理返回结果
@@ -100,10 +102,10 @@ class LLOneBotAdapter(BaseAdapter):
         if message_text:
             content.append({"type": "text", "data": {"text": message_text}})
 
-        # 构建 LLOneBot 转发节点格式（与OneBot标准兼容）
+        # 构建 LLOneBot 转发节点格式（与go-cqhttp标准兼容）
         return {
             "type": "node",
-            "data": {"user_id": sender_id, "nickname": sender_name, "content": content},
+            "data": {"uin": sender_id, "name": sender_name, "content": content},
         }
 
     def get_adapter_info(self) -> dict[str, Any]:
