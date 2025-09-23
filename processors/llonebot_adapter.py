@@ -46,17 +46,17 @@ class LLOneBotAdapter(BaseAdapter):
                 node = self.build_forward_node(msg, sender_id, sender_name)
                 forward_nodes.append(node)
 
-            # 构建 LLOneBot 格式的请求参数
+            # 使用 AstrBot 标准的 aiocqhttp call_action 方式
             if kwargs.get("user_id"):
                 # 私聊合并转发
-                result = await bot_client.api.call_action(
+                result = await bot_client.call_action(
                     "send_private_forward_msg",
                     user_id=int(kwargs["user_id"]),
                     messages=forward_nodes,
                 )
             else:
                 # 群聊合并转发
-                result = await bot_client.api.call_action(
+                result = await bot_client.call_action(
                     "send_group_forward_msg",
                     group_id=int(group_id),
                     messages=forward_nodes,

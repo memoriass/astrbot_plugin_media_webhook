@@ -41,9 +41,43 @@ Webhook URL: http://your-bot-server:60071/media-webhook
 
 ## 使用说明
 
-1. 配置插件参数
-2. 在媒体服务器中设置 Webhook URL
-3. 插件会自动接收并推送通知到指定群组
+1. **配置插件参数**
+   - 设置 `platform_name` 为你的协议端类型（如 `aiocqhttp`、`llonebot`、`napcat`）
+   - 配置 `group_id` 为目标群组ID
+   - 可选：设置 `adapter_type` 手动指定适配器类型
+
+2. **在媒体服务器中设置 Webhook URL**
+   ```
+   http://your-bot-server:60071/media-webhook
+   ```
+
+3. **插件会自动接收并推送通知到指定群组**
+   - 自动选择最佳适配器
+   - 支持合并转发，避免刷屏
+   - 包含图片和详细信息
+
+## 🔧 故障排除
+
+### LLOneBot 协议端收不到消息
+- ✅ **已修复**：更新了转发节点格式，使用标准的 `uin`/`name` 字段
+- ✅ **已修复**：统一了API调用方式，使用 `bot_client.api.call_action`
+
+### 其他常见问题
+- **消息发送失败**：检查 `platform_name` 配置是否正确
+- **适配器选择错误**：可手动设置 `adapter_type` 参数
+- **图片显示异常**：检查媒体服务器的图片URL是否可访问
+
+## 📊 状态查看
+
+使用指令查看插件状态：
+```
+/webhook status
+```
+
+显示信息包括：
+- 当前使用的适配器类型
+- 支持的功能特性
+- 配置参数状态
 
 - **协议端适配**:
   - **aiocqhttp**: 支持合并转发
