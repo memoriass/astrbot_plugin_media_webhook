@@ -15,11 +15,7 @@ class LLOneBotAdapter(BaseAdapter):
         super().__init__(platform_name)
 
     async def send_forward_messages(
-        self,
-        bot_client: Any,
-        group_id: str,
-        messages: list[dict[str, Any]],
-        **kwargs
+        self, bot_client: Any, group_id: str, messages: list[dict[str, Any]], **kwargs
     ) -> dict[str, Any]:
         """
         使用 LLOneBot 的合并转发 API 发送消息
@@ -53,42 +49,33 @@ class LLOneBotAdapter(BaseAdapter):
             # 构建 LLOneBot 格式的请求参数
             if kwargs.get("user_id"):
                 # 私聊合并转发
-                payload = {
-                    "user_id": int(kwargs["user_id"]),
-                    "messages": forward_nodes
-                }
-                result = await bot_client.call_action("send_private_forward_msg", **payload)
+                payload = {"user_id": int(kwargs["user_id"]), "messages": forward_nodes}
+                result = await bot_client.call_action(
+                    "send_private_forward_msg", **payload
+                )
             else:
                 # 群聊合并转发
-                payload = {
-                    "group_id": int(group_id),
-                    "messages": forward_nodes
-                }
-                result = await bot_client.call_action("send_group_forward_msg", **payload)
+                payload = {"group_id": int(group_id), "messages": forward_nodes}
+                result = await bot_client.call_action(
+                    "send_group_forward_msg", **payload
+                )
 
             # 处理返回结果
             message_id = result.get("message_id") if result else None
             self.log_send_result(True, str(message_id) if message_id else None)
 
-            return {
-                "success": True,
-                "message_id": message_id,
-                "result": result
-            }
+            return {"success": True, "message_id": message_id, "result": result}
 
         except Exception as e:
             error_msg = f"LLOneBot 发送失败: {str(e)}"
             self.log_send_result(False, error=error_msg)
-            return {
-                "success": False,
-                "error": error_msg
-            }
+            return {"success": False, "error": error_msg}
 
     def build_forward_node(
         self,
         message: dict[str, Any],
         sender_id: str = "2659908767",
-        sender_name: str = "媒体通知"
+        sender_name: str = "媒体通知",
     ) -> dict[str, Any]:
         """
         构建 LLOneBot 格式的转发节点
@@ -106,31 +93,17 @@ class LLOneBotAdapter(BaseAdapter):
 
         # 添加图片（如果有）
         if message.get("image_url"):
-            content.append({
-                "type": "image",
-                "data": {
-                    "file": message["image_url"]
-                }
-            })
+            content.append({"type": "image", "data": {"file": message["image_url"]}})
 
         # 添加文本
         message_text = str(message.get("message_text", "")).strip()
         if message_text:
-            content.append({
-                "type": "text",
-                "data": {
-                    "text": message_text
-                }
-            })
+            content.append({"type": "text", "data": {"text": message_text}})
 
         # 构建 LLOneBot 转发节点格式（与OneBot标准兼容）
         return {
             "type": "node",
-            "data": {
-                "user_id": sender_id,
-                "nickname": sender_name,
-                "content": content
-            }
+            "data": {"user_id": sender_id, "nickname": sender_name, "content": content},
         }
 
     def get_adapter_info(self) -> dict[str, Any]:
@@ -139,14 +112,11 @@ class LLOneBotAdapter(BaseAdapter):
             "name": "LLOneBot",
             "version": "1.0.0",
             "description": "基于 LLOneBot 的合并转发适配器",
-            "supported_apis": [
-                "send_group_forward_msg",
-                "send_private_forward_msg"
-            ],
+            "supported_apis": ["send_group_forward_msg", "send_private_forward_msg"],
             "features": [
                 "群聊合并转发",
                 "私聊合并转发",
                 "图片消息支持",
-                "OneBot标准兼容"
-            ]
-        }        }
+                "OneBot标准兼容",
+            ],
+        }

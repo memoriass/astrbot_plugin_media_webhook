@@ -11,7 +11,9 @@ class AdapterFactory:
     """适配器工厂类"""
 
     @staticmethod
-    def create_adapter(platform_name: str, adapter_type: str | None = None) -> BaseAdapter:
+    def create_adapter(
+        platform_name: str, adapter_type: str | None = None
+    ) -> BaseAdapter:
         """
         根据平台名称和适配器类型创建适配器实例
 
@@ -23,6 +25,7 @@ class AdapterFactory:
             适配器实例
         """
         # 导入适配器类（延迟导入避免循环依赖）
+        from .aiocqhttp_adapter import AiocqhttpAdapter
         from .generic_adapter import GenericAdapter
         from .llonebot_adapter import LLOneBotAdapter
         from .napcat_adapter import NapCatAdapter
@@ -36,6 +39,8 @@ class AdapterFactory:
             return NapCatAdapter(platform_name)
         elif adapter_type == AdapterType.LLONEBOT:
             return LLOneBotAdapter(platform_name)
+        elif adapter_type == AdapterType.AIOCQHTTP:
+            return AiocqhttpAdapter(platform_name)
         else:
             return GenericAdapter(platform_name)
 
@@ -48,8 +53,10 @@ class AdapterFactory:
             return AdapterType.NAPCAT
         elif "llonebot" in platform_lower:
             return AdapterType.LLONEBOT
-        elif platform_lower in ["aiocqhttp", "onebot"]:
-            return AdapterType.NAPCAT  # aiocqhttp通常兼容napcat格式
+        elif platform_lower in ["aiocqhttp"]:
+            return AdapterType.AIOCQHTTP  # 使用优化的aiocqhttp适配器
+        elif platform_lower in ["onebot"]:
+            return AdapterType.NAPCAT  # onebot通常兼容napcat格式
         else:
             return AdapterType.GENERIC
 
@@ -59,7 +66,8 @@ class AdapterFactory:
         return [
             AdapterType.NAPCAT,
             AdapterType.LLONEBOT,
-            AdapterType.GENERIC
+            AdapterType.AIOCQHTTP,
+            AdapterType.GENERIC,
         ]
 
     @staticmethod
@@ -69,21 +77,30 @@ class AdapterFactory:
             AdapterType.NAPCAT: {
                 "name": "NapCat",
                 "description": "支持NapCat协议的合并转发适配器",
-                "features": ["send_forward_msg", "群聊合并转发", "私聊合并转发"]
+                "features": ["send_forward_msg", "群聊合并转发", "私聊合并转发"],
             },
             AdapterType.LLONEBOT: {
                 "name": "LLOneBot",
                 "description": "支持LLOneBot协议的合并转发适配器",
-                "features": ["合并转发", "自定义发送者信息"]
+                "features": ["合并转发", "自定义发送者信息"],
+            },
+            AdapterType.AIOCQHTTP: {
+                "name": "AiocqhttpOptimized",
+                "description": "优化的aiocqhttp适配器，支持AstrBot原生组件和消息验证",
+                "features": [
+                    "AstrBot原生Node组件",
+                    "消息发送验证",
+                    "降级兼容",
+                    "群聊私聊支持",
+                ],
             },
             AdapterType.GENERIC: {
                 "name": "Generic",
                 "description": "通用OneBot协议适配器",
-                "features": ["基础合并转发"]
-            }
+                "features": ["基础合并转发"],
+            },
         }
-        return info_map.get(adapter_type, {
-            "name": "Unknown",
-            "description": "未知适配器类型",
-            "features": []
-        })        })
+        return info_map.get(
+            adapter_type,
+            {"name": "Unknown", "description": "未知适配器类型", "features": []},
+        )

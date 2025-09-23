@@ -18,11 +18,7 @@ class BaseAdapter(ABC):
 
     @abstractmethod
     async def send_forward_messages(
-        self,
-        bot_client: Any,
-        group_id: str,
-        messages: list[dict[str, Any]],
-        **kwargs
+        self, bot_client: Any, group_id: str, messages: list[dict[str, Any]], **kwargs
     ) -> dict[str, Any]:
         """
         发送合并转发消息
@@ -43,7 +39,7 @@ class BaseAdapter(ABC):
         self,
         message: dict[str, Any],
         sender_id: str = "2659908767",
-        sender_name: str = "媒体通知"
+        sender_name: str = "媒体通知",
     ) -> dict[str, Any]:
         """
         构建单个转发节点
@@ -74,20 +70,29 @@ class BaseAdapter(ABC):
 
     def log_send_attempt(self, message_count: int, method: str = "forward"):
         """记录发送尝试"""
-        self.logger.info(f"[{self.platform_name}] 尝试{method}发送 {message_count} 条消息")
+        self.logger.info(
+            f"[{self.platform_name}] 尝试{method}发送 {message_count} 条消息"
+        )
 
-    def log_send_result(self, success: bool, message_id: str | None = None, error: str | None = None):
+    def log_send_result(
+        self, success: bool, message_id: str | None = None, error: str | None = None
+    ):
         """记录发送结果"""
         if success:
-            self.logger.info(f"[{self.platform_name}] ✅ 发送成功，消息ID: {message_id or 'N/A'}")
+            self.logger.info(
+                f"[{self.platform_name}] ✅ 发送成功，消息ID: {message_id or 'N/A'}"
+            )
         else:
-            self.logger.error(f"[{self.platform_name}] ❌ 发送失败: {error or 'Unknown error'}")
+            self.logger.error(
+                f"[{self.platform_name}] ❌ 发送失败: {error or 'Unknown error'}"
+            )
 
 
 class AdapterType:
     """适配器类型常量"""
+
     NAPCAT = "napcat"
     LLONEBOT = "llonebot"
     ONEBOT = "onebot"
     AIOCQHTTP = "aiocqhttp"
-    GENERIC = "generic"    GENERIC = "generic"
+    GENERIC = "generic"
