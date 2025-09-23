@@ -1,0 +1,89 @@
+"""
+适配器类型定义和工厂类
+"""
+
+from typing import Any
+
+from .adapter_base import AdapterType, BaseAdapter
+
+
+class AdapterFactory:
+    """适配器工厂类"""
+
+    @staticmethod
+    def create_adapter(platform_name: str, adapter_type: str | None = None) -> BaseAdapter:
+        """
+        根据平台名称和适配器类型创建适配器实例
+
+        Args:
+            platform_name: 平台名称
+            adapter_type: 适配器类型，如果为None则根据平台名称自动推断
+
+        Returns:
+            适配器实例
+        """
+        # 导入适配器类（延迟导入避免循环依赖）
+        from .generic_adapter import GenericAdapter
+        from .llonebot_adapter import LLOneBotAdapter
+        from .napcat_adapter import NapCatAdapter
+
+        # 如果没有指定适配器类型，根据平台名称自动推断
+        if adapter_type is None:
+            adapter_type = AdapterFactory._infer_adapter_type(platform_name)
+
+        # 根据适配器类型创建实例
+        if adapter_type == AdapterType.NAPCAT:
+            return NapCatAdapter(platform_name)
+        elif adapter_type == AdapterType.LLONEBOT:
+            return LLOneBotAdapter(platform_name)
+        else:
+            return GenericAdapter(platform_name)
+
+    @staticmethod
+    def _infer_adapter_type(platform_name: str) -> str:
+        """根据平台名称推断适配器类型"""
+        platform_lower = platform_name.lower()
+
+        if "napcat" in platform_lower:
+            return AdapterType.NAPCAT
+        elif "llonebot" in platform_lower:
+            return AdapterType.LLONEBOT
+        elif platform_lower in ["aiocqhttp", "onebot"]:
+            return AdapterType.NAPCAT  # aiocqhttp通常兼容napcat格式
+        else:
+            return AdapterType.GENERIC
+
+    @staticmethod
+    def get_supported_types() -> list[str]:
+        """获取支持的适配器类型列表"""
+        return [
+            AdapterType.NAPCAT,
+            AdapterType.LLONEBOT,
+            AdapterType.GENERIC
+        ]
+
+    @staticmethod
+    def get_adapter_info(adapter_type: str) -> dict[str, Any]:
+        """获取适配器信息"""
+        info_map = {
+            AdapterType.NAPCAT: {
+                "name": "NapCat",
+                "description": "支持NapCat协议的合并转发适配器",
+                "features": ["send_forward_msg", "群聊合并转发", "私聊合并转发"]
+            },
+            AdapterType.LLONEBOT: {
+                "name": "LLOneBot",
+                "description": "支持LLOneBot协议的合并转发适配器",
+                "features": ["合并转发", "自定义发送者信息"]
+            },
+            AdapterType.GENERIC: {
+                "name": "Generic",
+                "description": "通用OneBot协议适配器",
+                "features": ["基础合并转发"]
+            }
+        }
+        return info_map.get(adapter_type, {
+            "name": "Unknown",
+            "description": "未知适配器类型",
+            "features": []
+        })        })

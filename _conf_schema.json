@@ -76,5 +76,23 @@
     "type": "bool",
     "hint": "当原始数据无图片时，是否尝试从 TMDB 和 Fanart.tv 获取图片",
     "default": true
+  },
+  "adapter_type": {
+    "description": "适配器类型",
+    "type": "string",
+    "hint": "指定使用的协议适配器类型，留空则根据平台名称自动推断。可选值：napcat、llonebot、generic",
+    "default": ""
+  },
+  "sender_id": {
+    "description": "发送者QQ号",
+    "type": "string",
+    "hint": "合并转发消息中显示的发送者QQ号",
+    "default": "2659908767"
+  },
+  "sender_name": {
+    "description": "发送者昵称",
+    "type": "string",
+    "hint": "合并转发消息中显示的发送者昵称",
+    "default": "媒体通知"
   }
 }

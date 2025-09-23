@@ -11,8 +11,9 @@ from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.star import Context, Star, register
 
-from .processors import AniRSSHandler
 from .media_handler import MediaHandler
+from .processors import AniRSSHandler
+from .processors.adapter_type import AdapterFactory
 
 
 @register(
@@ -36,6 +37,11 @@ class MediaWebhookPlugin(Star):
         self.batch_min_size = config.get("batch_min_size", 3)
         self.batch_interval_seconds = config.get("batch_interval_seconds", 300)
         self.cache_ttl_seconds = config.get("cache_ttl_seconds", 300)
+
+        # 适配器配置
+        self.adapter_type = config.get("adapter_type", None)  # 如果为None则自动推断
+        self.sender_id = config.get("sender_id", "2659908767")
+        self.sender_name = config.get("sender_name", "媒体通知")
 
         # API 配置
         self.tmdb_api_key = config.get("tmdb_api_key", "")
@@ -262,7 +268,7 @@ class MediaWebhookPlugin(Star):
                 "raw_data": body_text,
                 "headers": headers,
                 "timestamp": time.time(),
-                "message_type": "raw"  # 标记为原始数据，需要检测
+                "message_type": "raw",  # 标记为原始数据，需要检测
             }
 
             # 添加到队列
@@ -441,7 +447,9 @@ class MediaWebhookPlugin(Star):
             platform_lower = self.platform_name.lower()
             message_count = len(media_messages)
 
-            logger.info(f"智能发送 {message_count} 条媒体消息 [平台: {self.platform_name}]")
+            logger.info(
+                f"智能发送 {message_count} 条媒体消息 [平台: {self.platform_name}]"
+            )
 
             # aiocqhttp 优选 API 发送模式（合并转发）
             if platform_lower == "aiocqhttp":
@@ -564,64 +572,37 @@ class MediaWebhookPlugin(Star):
                     await self.send_individual_messages(messages)
                     return
 
-            # 构建NapCat格式的合并转发消息
-            forward_messages = []
-            for msg in messages:
-                # 构建消息内容
-                content = []
+            # 创建适配器实例
+            actual_platform_name = (
+                platform_instance.meta().name
+                if platform_instance
+                else self.platform_name
+            )
+            adapter = AdapterFactory.create_adapter(
+                actual_platform_name, self.adapter_type
+            )
 
-                # 添加图片
-                if msg.get("image_url"):
-                    content.append({
-                        "type": "image",
-                        "data": {
-                            "file": msg["image_url"]
-                        }
-                    })
+            logger.info(f"使用适配器: {adapter.__class__.__name__}")
 
-                # 添加文本
-                if msg.get("message_text"):
-                    content.append({
-                        "type": "text",
-                        "data": {
-                            "text": msg["message_text"]
-                        }
-                    })
+            # 使用适配器发送消息
+            result = await adapter.send_forward_messages(
+                bot_client=bot_client,
+                group_id=group_id,
+                messages=messages,
+                sender_id=self.sender_id,
+                sender_name=self.sender_name,
+            )
 
-                # 创建转发节点
-                node = {
-                    "type": "node",
-                    "data": {
-                        "user_id": "2659908767",  # 可配置的发送者ID
-                        "nickname": "媒体通知",    # 可配置的发送者昵称
-                        "content": content
-                    }
-                }
-                forward_messages.append(node)
-
-            # 尝试不同的合并转发API
-            platform_name = platform_instance.meta().name if platform_instance else "unknown"
-            logger.debug(f"使用平台: {platform_name}")
-
-            # 构建合并转发消息
-            if platform_name in ["aiocqhttp", "napcat", "onebot"]:
-                # OneBot协议的合并转发
-                payload = {
-                    "group_id": int(group_id),
-                    "messages": forward_messages
-                }
-                result = await bot_client.call_action("send_group_forward_msg", **payload)
+            if result.get("success"):
+                logger.info(
+                    f"✅ 适配器发送成功，消息ID: {result.get('message_id', 'N/A')}"
+                )
             else:
-                # 其他协议，尝试通用的合并转发
-                payload = {
-                    "group_id": int(group_id),
-                    "messages": forward_messages,
-                    "prompt": "媒体通知合并转发",
-                    "summary": f"共{len(messages)}条媒体通知"
-                }
-                result = await bot_client.call_action("send_group_forward_msg", **payload)
-
-            logger.info(f"✅ 成功发送 {len(forward_messages)} 条合并转发消息，消息ID: {result.get('message_id', 'N/A')}")
+                logger.error(
+                    f"❌ 适配器发送失败: {result.get('error', 'Unknown error')}"
+                )
+                # 回退到单独发送
+                await self.send_individual_messages(messages)
 
         except Exception as e:
             logger.error(f"发送合并转发失败: {e}")
@@ -669,6 +650,18 @@ class MediaWebhookPlugin(Star):
         # 获取子模块状态
         media_stats = self.media_handler.get_processing_stats()
 
+        # 获取适配器信息
+        try:
+            adapter = AdapterFactory.create_adapter(
+                self.platform_name, self.adapter_type
+            )
+            adapter_info = adapter.get_adapter_info()
+            adapter_name = adapter_info.get("name", "Unknown")
+            adapter_features = ", ".join(adapter_info.get("features", []))
+        except Exception as e:
+            adapter_name = f"Error: {str(e)}"
+            adapter_features = "N/A"
+
         status_text = f"""📊 Media Webhook 状态
 
 🌐 服务状态: {"运行中" if self.site else "未启动"}
@@ -679,6 +672,12 @@ class MediaWebhookPlugin(Star):
 ⏱️ 批量间隔: {self.batch_interval_seconds} 秒
 🎯 目标群组: {self.group_id or "未配置"}
 🤖 协议平台: {self.platform_name}
+
+🔧 适配器状态:
+  📡 当前适配器: {adapter_name}
+  🎛️ 配置类型: {self.adapter_type or "自动推断"}
+  👤 发送者: {self.sender_name} ({self.sender_id})
+  ✨ 支持功能: {adapter_features}
 
 📂 子模块状态:
   🎬 媒体处理器: 已启用
