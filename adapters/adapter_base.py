@@ -95,4 +95,3 @@ class AdapterType:
     LLONEBOT = "llonebot"
     ONEBOT = "onebot"
     AIOCQHTTP = "aiocqhttp"
-    GENERIC = "generic"

@@ -26,7 +26,6 @@ class AdapterFactory:
         """
         # 导入适配器类（延迟导入避免循环依赖）
         from .aiocqhttp_adapter import AiocqhttpAdapter
-        from .generic_adapter import GenericAdapter
         from .llonebot_adapter import LLOneBotAdapter
         from .napcat_adapter import NapCatAdapter
 
@@ -39,10 +38,9 @@ class AdapterFactory:
             return NapCatAdapter(platform_name)
         elif adapter_type == AdapterType.LLONEBOT:
             return LLOneBotAdapter(platform_name)
-        elif adapter_type == AdapterType.AIOCQHTTP:
-            return AiocqhttpAdapter(platform_name)
         else:
-            return GenericAdapter(platform_name)
+            # 默认使用 aiocqhttp 适配器
+            return AiocqhttpAdapter(platform_name)
 
     @staticmethod
     def _infer_adapter_type(platform_name: str) -> str:
@@ -53,12 +51,11 @@ class AdapterFactory:
             return AdapterType.NAPCAT
         elif "llonebot" in platform_lower:
             return AdapterType.LLONEBOT
-        elif platform_lower in ["aiocqhttp"]:
-            return AdapterType.AIOCQHTTP  # 使用优化的aiocqhttp适配器
         elif platform_lower in ["onebot"]:
             return AdapterType.NAPCAT  # onebot通常兼容napcat格式
         else:
-            return AdapterType.GENERIC
+            # 默认使用 aiocqhttp 适配器
+            return AdapterType.AIOCQHTTP
 
     @staticmethod
     def get_supported_types() -> list[str]:
@@ -67,7 +64,6 @@ class AdapterFactory:
             AdapterType.NAPCAT,
             AdapterType.LLONEBOT,
             AdapterType.AIOCQHTTP,
-            AdapterType.GENERIC,
         ]
 
     @staticmethod
@@ -93,11 +89,6 @@ class AdapterFactory:
                     "降级兼容",
                     "群聊私聊支持",
                 ],
-            },
-            AdapterType.GENERIC: {
-                "name": "Generic",
-                "description": "通用OneBot协议适配器",
-                "features": ["基础合并转发"],
             },
         }
         return info_map.get(

@@ -3,17 +3,16 @@ import hashlib
 import json
 import time
 
+import astrbot.api.message_components as Comp
 from aiohttp import web
 from aiohttp.web import Request, Response
-
-import astrbot.api.message_components as Comp
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.star import Context, Star, register
 
+from .adapters import AdapterFactory
 from .media_handler import MediaHandler
 from .processors import AniRSSHandler
-from .processors.adapter_type import AdapterFactory
 
 
 @register(
