@@ -42,7 +42,7 @@ class AiocqhttpAdapter(BaseAdapter):
             # 构建 AstrBot 原生 Node 组件列表
             nodes = []
 
-            for i, msg in enumerate(messages):
+            for _i, msg in enumerate(messages):
                 # 构建消息内容
                 content = []
 
@@ -118,7 +118,7 @@ class AiocqhttpAdapter(BaseAdapter):
                 "send_group_msg", group_id=int(group_id), message=message_chain.chain
             )
             return result
-        except Exception as e:
+        except Exception:
             # 如果原生组件失败，尝试降级到基础API
             return await self._fallback_send_group_message(
                 bot_client, group_id, message_chain
@@ -134,7 +134,7 @@ class AiocqhttpAdapter(BaseAdapter):
                 "send_private_msg", user_id=int(user_id), message=message_chain.chain
             )
             return result
-        except Exception as e:
+        except Exception:
             # 如果原生组件失败，尝试降级到基础API
             return await self._fallback_send_private_message(
                 bot_client, user_id, message_chain
@@ -155,7 +155,7 @@ class AiocqhttpAdapter(BaseAdapter):
             )
             return result
         except Exception as e:
-            raise Exception(f"群聊消息发送失败: {str(e)}")
+            raise Exception(f"群聊消息发送失败: {str(e)}") from e
 
     async def _fallback_send_private_message(
         self, bot_client: Any, user_id: str, message_chain: MessageChain
@@ -172,7 +172,7 @@ class AiocqhttpAdapter(BaseAdapter):
             )
             return result
         except Exception as e:
-            raise Exception(f"私聊消息发送失败: {str(e)}")
+            raise Exception(f"私聊消息发送失败: {str(e)}") from e
 
     async def _validate_message_sent(
         self,

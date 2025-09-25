@@ -10,8 +10,8 @@ from typing import Optional
 
 from astrbot.api import logger
 
-from .tmdb_enricher import TMDBEnricher
 from .processors import ProcessorManager
+from .tmdb_enricher import TMDBEnricher
 
 
 class MediaHandler:
@@ -102,7 +102,7 @@ class MediaHandler:
         """获取处理统计信息"""
         stats = {
             "tmdb_enabled": self.tmdb_enabled,
-            "processor_info": self.processor_manager.get_processor_info()
+            "processor_info": self.processor_manager.get_processor_info(),
         }
 
         if self.tmdb_enricher:
@@ -473,5 +473,3 @@ class MediaHandler:
             sections.append(f"名称: {series_name}{year_text}")
 
         return "\n".join(sections)
-
-

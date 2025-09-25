@@ -4,7 +4,9 @@ Plex媒体处理器
 """
 
 from typing import Optional
+
 from astrbot.api import logger
+
 from .base_processor import BaseMediaProcessor
 
 
@@ -46,7 +48,7 @@ class PlexProcessor(BaseMediaProcessor):
                 "season": "Season",
                 "show": "Series",
                 "track": "Song",
-                "album": "Album"
+                "album": "Album",
             }
             item_type = plex_type_map.get(item_type.lower(), item_type.title())
 
@@ -109,7 +111,7 @@ class PlexProcessor(BaseMediaProcessor):
                 overview=overview,
                 runtime=runtime,
                 image_url=image_url,
-                source_data="plex"
+                source_data="plex",
             )
 
             logger.debug(f"Plex 转换结果: {result}")
@@ -155,7 +157,9 @@ class PlexProcessor(BaseMediaProcessor):
         if metadata.get("Role"):
             actors = metadata.get("Role", [])
             if isinstance(actors, list):
-                plex_metadata["actors"] = [a.get("tag", "") for a in actors[:5]]  # 限制前5个
+                plex_metadata["actors"] = [
+                    a.get("tag", "") for a in actors[:5]
+                ]  # 限制前5个
 
         return plex_metadata
 

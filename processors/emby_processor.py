@@ -4,7 +4,9 @@ Emby媒体处理器
 """
 
 from typing import Optional
+
 from astrbot.api import logger
+
 from .base_processor import BaseMediaProcessor
 
 
@@ -72,7 +74,9 @@ class EmbyProcessor(BaseMediaProcessor):
                 server_info = data.get("Server", {})
                 server_url = server_info.get("Url", "")
                 item_id = item.get("Id", "")
-                logger.debug(f"Emby 图片信息: server_url={server_url}, item_id={item_id}")
+                logger.debug(
+                    f"Emby 图片信息: server_url={server_url}, item_id={item_id}"
+                )
 
                 if server_url and item_id:
                     # 确保服务器URL不以/结尾
@@ -92,7 +96,7 @@ class EmbyProcessor(BaseMediaProcessor):
                 overview=overview,
                 runtime=runtime,
                 image_url=image_url,
-                source_data="emby"
+                source_data="emby",
             )
 
             logger.debug(f"Emby 转换结果: {result}")
@@ -109,12 +113,18 @@ class EmbyProcessor(BaseMediaProcessor):
 
         # 提取演员信息
         people = item.get("People", [])
-        actors = [person.get("Name", "") for person in people if person.get("Type") == "Actor"]
+        actors = [
+            person.get("Name", "") for person in people if person.get("Type") == "Actor"
+        ]
         if actors:
             metadata["actors"] = actors[:5]  # 限制前5个演员
 
         # 提取导演信息
-        directors = [person.get("Name", "") for person in people if person.get("Type") == "Director"]
+        directors = [
+            person.get("Name", "")
+            for person in people
+            if person.get("Type") == "Director"
+        ]
         if directors:
             metadata["directors"] = directors
 

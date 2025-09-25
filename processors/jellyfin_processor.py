@@ -4,7 +4,9 @@ Jellyfin媒体处理器
 """
 
 from typing import Optional
+
 from astrbot.api import logger
+
 from .base_processor import BaseMediaProcessor
 
 
@@ -81,7 +83,7 @@ class JellyfinProcessor(BaseMediaProcessor):
                 overview=overview,
                 runtime=runtime,
                 image_url=image_url,
-                source_data="jellyfin"
+                source_data="jellyfin",
             )
 
             logger.debug(f"Jellyfin 转换结果: {result}")
@@ -125,7 +127,9 @@ class JellyfinProcessor(BaseMediaProcessor):
             if video_streams:
                 video = video_streams[0]
                 metadata["video_codec"] = video.get("Codec", "")
-                metadata["resolution"] = f"{video.get('Width', '')}x{video.get('Height', '')}"
+                metadata["resolution"] = (
+                    f"{video.get('Width', '')}x{video.get('Height', '')}"
+                )
 
             if audio_streams:
                 audio = audio_streams[0]

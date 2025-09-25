@@ -3,13 +3,13 @@
 提供模块化的媒体数据处理功能
 """
 
+from .ani_rss_handler import AniRSSHandler
 from .base_processor import BaseMediaProcessor
 from .emby_processor import EmbyProcessor
+from .generic_processor import GenericProcessor
 from .jellyfin_processor import JellyfinProcessor
 from .plex_processor import PlexProcessor
-from .generic_processor import GenericProcessor
 from .processor_manager import ProcessorManager
-from .ani_rss_handler import AniRSSHandler
 
 __all__ = [
     "BaseMediaProcessor",
@@ -18,5 +18,5 @@ __all__ = [
     "PlexProcessor",
     "GenericProcessor",
     "ProcessorManager",
-    "AniRSSHandler"
+    "AniRSSHandler",
 ]

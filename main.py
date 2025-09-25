@@ -3,9 +3,10 @@ import hashlib
 import json
 import time
 
-import astrbot.api.message_components as Comp
 from aiohttp import web
 from aiohttp.web import Request, Response
+
+import astrbot.api.message_components as Comp
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.star import Context, Star, register
@@ -13,6 +14,14 @@ from astrbot.api.star import Context, Star, register
 from .adapters import AdapterFactory
 from .media_handler import MediaHandler
 from .processors import AniRSSHandler
+
+# 常量定义
+DEFAULT_SENDER_ID = "2659908767"
+DEFAULT_SENDER_NAME = "媒体通知"
+DEFAULT_WEBHOOK_PORT = 60071
+DEFAULT_BATCH_MIN_SIZE = 3
+DEFAULT_CACHE_TTL = 300
+DEFAULT_BATCH_INTERVAL = 300
 
 
 @register(
@@ -30,16 +39,18 @@ class MediaWebhookPlugin(Star):
         self.config = config
 
         # 核心配置
-        self.webhook_port = config.get("webhook_port", 60071)
+        self.webhook_port = config.get("webhook_port", DEFAULT_WEBHOOK_PORT)
         self.group_id = config.get("group_id", "")
         self.platform_name = config.get("platform_name", "auto")
-        self.batch_min_size = config.get("batch_min_size", 3)
-        self.batch_interval_seconds = config.get("batch_interval_seconds", 300)
-        self.cache_ttl_seconds = config.get("cache_ttl_seconds", 300)
+        self.batch_min_size = config.get("batch_min_size", DEFAULT_BATCH_MIN_SIZE)
+        self.batch_interval_seconds = config.get(
+            "batch_interval_seconds", DEFAULT_BATCH_INTERVAL
+        )
+        self.cache_ttl_seconds = config.get("cache_ttl_seconds", DEFAULT_CACHE_TTL)
 
         # 适配器配置
-        self.sender_id = config.get("sender_id", "2659908767")
-        self.sender_name = config.get("sender_name", "媒体通知")
+        self.sender_id = config.get("sender_id", DEFAULT_SENDER_ID)
+        self.sender_name = config.get("sender_name", DEFAULT_SENDER_NAME)
 
         # API 配置
         self.tmdb_api_key = config.get("tmdb_api_key", "")
@@ -303,7 +314,9 @@ class MediaWebhookPlugin(Star):
         """直接发送 Ani-RSS 消息（独立处理，不进入批量处理器）"""
         try:
             group_id = str(self.group_id).replace(":", "_")
-            unified_msg_origin = f"{self.get_effective_platform_name()}:GroupMessage:{group_id}"
+            unified_msg_origin = (
+                f"{self.get_effective_platform_name()}:GroupMessage:{group_id}"
+            )
 
             # 记录日志
             has_image = bool(message_payload.get("image_url"))
@@ -336,7 +349,9 @@ class MediaWebhookPlugin(Star):
         """在批量处理器中独立发送单条 Ani-RSS 消息"""
         try:
             group_id = str(self.group_id).replace(":", "_")
-            unified_msg_origin = f"{self.get_effective_platform_name()}:GroupMessage:{group_id}"
+            unified_msg_origin = (
+                f"{self.get_effective_platform_name()}:GroupMessage:{group_id}"
+            )
 
             # 记录日志
             has_image = bool(message_payload.get("image_url"))
@@ -443,7 +458,6 @@ class MediaWebhookPlugin(Star):
         """智能发送标准媒体消息（根据协议端选择最优发送模式）"""
         try:
             effective_platform = self.get_effective_platform_name()
-            platform_lower = effective_platform.lower()
             message_count = len(media_messages)
 
             logger.info(
@@ -532,7 +546,9 @@ class MediaWebhookPlugin(Star):
     async def send_batch_messages(self, messages: list[dict]):
         """发送合并转发消息（使用 AstrBot pipeline）"""
         group_id = str(self.group_id).replace(":", "_")
-        unified_msg_origin = f"{self.get_effective_platform_name()}:GroupMessage:{group_id}"
+        unified_msg_origin = (
+            f"{self.get_effective_platform_name()}:GroupMessage:{group_id}"
+        )
 
         logger.info(f"发送合并转发: {len(messages)} 条消息 [使用 AstrBot pipeline]")
 
@@ -543,21 +559,13 @@ class MediaWebhookPlugin(Star):
                 # 构建单个节点的内容
                 content_list = []
 
-                # 调试：打印消息内容
-                logger.info(f"处理消息: {msg}")
-
                 # 添加图片（如果有）
                 if msg.get("image_url"):
-                    logger.info(f"添加图片到节点: {msg['image_url']}")
                     image_comp = Comp.Image.fromURL(msg["image_url"])
                     content_list.append(image_comp)
-                    logger.info(f"图片组件创建成功: {type(image_comp)}")
-                else:
-                    logger.info(f"消息中没有图片URL: {msg.keys()}")
 
                 # 添加文本
                 content_list.append(Comp.Plain(msg["message_text"]))
-                logger.info(f"节点内容列表: {len(content_list)} 个组件")
 
                 # 创建节点
                 node = Comp.Node(
@@ -577,7 +585,7 @@ class MediaWebhookPlugin(Star):
 
             # 通过 AstrBot pipeline 发送消息
             await self.context.send_message(unified_msg_origin, message_chain)
-            logger.info(f"✅ 合并转发发送成功 [通过 AstrBot pipeline]")
+            logger.info("✅ 合并转发发送成功 [通过 AstrBot pipeline]")
 
         except Exception as e:
             logger.error(f"发送合并转发失败: {e}")
@@ -589,7 +597,9 @@ class MediaWebhookPlugin(Star):
     async def send_individual_messages(self, messages: list[dict]):
         """发送单独消息"""
         group_id = str(self.group_id).replace(":", "_")
-        unified_msg_origin = f"{self.get_effective_platform_name()}:GroupMessage:{group_id}"
+        unified_msg_origin = (
+            f"{self.get_effective_platform_name()}:GroupMessage:{group_id}"
+        )
 
         logger.info(f"发送单独消息: {len(messages)} 条消息")
         logger.info(f"目标群组ID: {group_id}")
@@ -649,7 +659,7 @@ class MediaWebhookPlugin(Star):
 ⚙️ 批量阈值: {self.batch_min_size} 条
 ⏱️ 批量间隔: {self.batch_interval_seconds} 秒
 🎯 目标群组: {self.group_id or "未配置"}
-🤖 协议平台: {self.platform_name} {'(自动检测: ' + self.get_effective_platform_name() + ')' if self.platform_name == 'auto' else ''}
+🤖 协议平台: {self.platform_name} {"(自动检测: " + self.get_effective_platform_name() + ")" if self.platform_name == "auto" else ""}
 
 🔧 适配器状态:
   📡 当前适配器: {adapter_name}
@@ -682,11 +692,13 @@ class MediaWebhookPlugin(Star):
         platforms = []
         for platform_inst in self.context.platform_manager.platform_insts:
             platform_meta = platform_inst.meta()
-            platforms.append({
-                "id": platform_meta.id,
-                "name": platform_meta.name,
-                "description": platform_meta.description
-            })
+            platforms.append(
+                {
+                    "id": platform_meta.id,
+                    "name": platform_meta.name,
+                    "description": platform_meta.description,
+                }
+            )
         return platforms
 
     def auto_detect_platform(self) -> str:
@@ -703,13 +715,20 @@ class MediaWebhookPlugin(Star):
         # 按优先级查找
         for priority_name in priority_order:
             for platform in available_platforms:
-                if priority_name in platform["name"].lower() or priority_name in platform["id"].lower():
-                    logger.info(f"自动检测到平台: {platform['id']} ({platform['name']})")
+                if (
+                    priority_name in platform["name"].lower()
+                    or priority_name in platform["id"].lower()
+                ):
+                    logger.info(
+                        f"自动检测到平台: {platform['id']} ({platform['name']})"
+                    )
                     return platform["id"]
 
         # 如果没有找到优先级平台，使用第一个可用平台
         first_platform = available_platforms[0]
-        logger.info(f"使用第一个可用平台: {first_platform['id']} ({first_platform['name']})")
+        logger.info(
+            f"使用第一个可用平台: {first_platform['id']} ({first_platform['name']})"
+        )
         return first_platform["id"]
 
     def get_effective_platform_name(self) -> str:

@@ -6,7 +6,7 @@
 import html
 import re
 from abc import ABC, abstractmethod
-from typing import Optional, Any
+from typing import Any, Optional
 
 from astrbot.api import logger
 
@@ -59,7 +59,11 @@ class BaseMediaProcessor(ABC):
     def safe_get_runtime(self, runtime_ticks: Any) -> str:
         """安全地转换运行时间"""
         try:
-            if runtime_ticks and isinstance(runtime_ticks, (int, float)) and runtime_ticks > 0:
+            if (
+                runtime_ticks
+                and isinstance(runtime_ticks, (int, float))
+                and runtime_ticks > 0
+            ):
                 # Emby/Jellyfin的RunTimeTicks是以100纳秒为单位
                 # 1秒 = 10,000,000 ticks，1分钟 = 600,000,000 ticks
                 runtime_minutes = int(runtime_ticks // 600000000)
@@ -80,8 +84,12 @@ class BaseMediaProcessor(ABC):
             "item_type": kwargs.get("item_type", "Unknown"),
             "series_name": kwargs.get("series_name", ""),
             "item_name": kwargs.get("item_name", ""),
-            "season_number": str(kwargs.get("season_number", "")) if kwargs.get("season_number") else "",
-            "episode_number": str(kwargs.get("episode_number", "")) if kwargs.get("episode_number") else "",
+            "season_number": str(kwargs.get("season_number", ""))
+            if kwargs.get("season_number")
+            else "",
+            "episode_number": str(kwargs.get("episode_number", ""))
+            if kwargs.get("episode_number")
+            else "",
             "year": str(kwargs.get("year", "")) if kwargs.get("year") else "",
             "overview": kwargs.get("overview", ""),
             "runtime": kwargs.get("runtime", ""),

@@ -71,7 +71,9 @@ class TMDBEnricher:
 
                 # 即使TMDB丰富失败，如果原始数据无图片且启用了图片降级，也尝试获取图片
                 if not media_data.get("image_url") and self.tmdb_api_key:
-                    image_enriched_data = await self.try_image_only_enrichment(media_data)
+                    image_enriched_data = await self.try_image_only_enrichment(
+                        media_data
+                    )
                     if image_enriched_data.get("image_url"):
                         logger.info("图片获取成功")
                         return image_enriched_data
@@ -101,21 +103,33 @@ class TMDBEnricher:
 
             # 获取剧集详情
             try:
-                season_num = int(season_number) if season_number and season_number.strip() else 1
-                episode_num = int(episode_number) if episode_number and episode_number.strip() else 1
+                season_num = (
+                    int(season_number) if season_number and season_number.strip() else 1
+                )
+                episode_num = (
+                    int(episode_number)
+                    if episode_number and episode_number.strip()
+                    else 1
+                )
                 episode_details = await self.get_tmdb_episode_details(
                     tv_id, season_num, episode_num
                 )
             except (ValueError, TypeError) as e:
-                logger.debug(f"季数或集数转换失败: season={season_number}, episode={episode_number}, error={e}")
+                logger.debug(
+                    f"季数或集数转换失败: season={season_number}, episode={episode_number}, error={e}"
+                )
                 # 即使剧集详情获取失败，也尝试使用剧集海报
                 enriched_data = media_data.copy()
                 if tv_show.get("poster_path") and not enriched_data.get("image_url"):
                     poster_path = tv_show.get("poster_path")
-                    enriched_data["image_url"] = f"https://image.tmdb.org/t/p/w500{poster_path}"
+                    enriched_data["image_url"] = (
+                        f"https://image.tmdb.org/t/p/w500{poster_path}"
+                    )
                     enriched_data["tmdb_enriched"] = True
                     enriched_data["tmdb_tv_id"] = tv_id
-                    logger.info(f"TMDB 剧集海报获取成功（降级）: {enriched_data['image_url']}")
+                    logger.info(
+                        f"TMDB 剧集海报获取成功（降级）: {enriched_data['image_url']}"
+                    )
                     return enriched_data
                 return media_data
 
@@ -151,10 +165,18 @@ class TMDBEnricher:
                     logger.debug("TMDB 剧集截图路径为空，尝试获取剧集海报")
                     # 如果没有剧集截图，尝试获取剧集海报
                     tv_show_data = enriched_data.get("tmdb_tv_show", {})
-                    if tv_show_data and tv_show_data.get("poster_path") and not enriched_data.get("image_url"):
+                    if (
+                        tv_show_data
+                        and tv_show_data.get("poster_path")
+                        and not enriched_data.get("image_url")
+                    ):
                         poster_path = tv_show_data.get("poster_path")
-                        enriched_data["image_url"] = f"https://image.tmdb.org/t/p/w500{poster_path}"
-                        logger.info(f"TMDB 剧集海报获取成功: {enriched_data['image_url']}")
+                        enriched_data["image_url"] = (
+                            f"https://image.tmdb.org/t/p/w500{poster_path}"
+                        )
+                        logger.info(
+                            f"TMDB 剧集海报获取成功: {enriched_data['image_url']}"
+                        )
 
                 # 添加 TMDB 标记和 ID
                 enriched_data["tmdb_enriched"] = True
@@ -168,10 +190,14 @@ class TMDBEnricher:
                 enriched_data = media_data.copy()
                 if tv_show.get("poster_path") and not enriched_data.get("image_url"):
                     poster_path = tv_show.get("poster_path")
-                    enriched_data["image_url"] = f"https://image.tmdb.org/t/p/w500{poster_path}"
+                    enriched_data["image_url"] = (
+                        f"https://image.tmdb.org/t/p/w500{poster_path}"
+                    )
                     enriched_data["tmdb_enriched"] = True
                     enriched_data["tmdb_tv_id"] = tv_id
-                    logger.info(f"TMDB 剧集海报获取成功（无剧集详情）: {enriched_data['image_url']}")
+                    logger.info(
+                        f"TMDB 剧集海报获取成功（无剧集详情）: {enriched_data['image_url']}"
+                    )
                     return enriched_data
 
             return media_data
@@ -206,14 +232,26 @@ class TMDBEnricher:
 
             if season_number and episode_number:
                 try:
-                    season_num = int(season_number) if season_number and season_number.strip() else 1
-                    episode_num = int(episode_number) if episode_number and episode_number.strip() else 1
-                    episode_details = await self.get_tmdb_episode_details(tv_id, season_num, episode_num)
+                    season_num = (
+                        int(season_number)
+                        if season_number and season_number.strip()
+                        else 1
+                    )
+                    episode_num = (
+                        int(episode_number)
+                        if episode_number and episode_number.strip()
+                        else 1
+                    )
+                    episode_details = await self.get_tmdb_episode_details(
+                        tv_id, season_num, episode_num
+                    )
 
                     if episode_details:
                         still_path = episode_details.get("still_path")
                         if still_path:
-                            enriched_data["image_url"] = f"https://image.tmdb.org/t/p/w500{still_path}"
+                            enriched_data["image_url"] = (
+                                f"https://image.tmdb.org/t/p/w500{still_path}"
+                            )
                             logger.info("TMDB 剧集截图获取成功")
                             return enriched_data
                 except (ValueError, TypeError) as e:
@@ -230,7 +268,9 @@ class TMDBEnricher:
             # 如果都失败了，尝试从TMDB获取剧集海报
             poster_path = tv_show.get("poster_path")
             if poster_path:
-                enriched_data["image_url"] = f"https://image.tmdb.org/t/p/w500{poster_path}"
+                enriched_data["image_url"] = (
+                    f"https://image.tmdb.org/t/p/w500{poster_path}"
+                )
                 logger.info("TMDB 剧集海报获取成功")
                 return enriched_data
 

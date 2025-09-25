@@ -4,7 +4,9 @@
 """
 
 from typing import Optional
+
 from astrbot.api import logger
+
 from .base_processor import BaseMediaProcessor
 
 
@@ -22,10 +24,10 @@ class GenericProcessor(BaseMediaProcessor):
 
             # 提取基本信息，尝试多种可能的字段名
             item_type = (
-                data.get("ItemType") or
-                data.get("Type") or
-                data.get("item_type") or
-                data.get("type", "Episode")
+                data.get("ItemType")
+                or data.get("Type")
+                or data.get("item_type")
+                or data.get("type", "Episode")
             )
 
             # 标准化类型名称
@@ -33,32 +35,32 @@ class GenericProcessor(BaseMediaProcessor):
 
             # 提取名称信息
             item_name = (
-                data.get("Name") or
-                data.get("name") or
-                data.get("title") or
-                data.get("Title", "")
+                data.get("Name")
+                or data.get("name")
+                or data.get("title")
+                or data.get("Title", "")
             )
 
             # 提取剧集信息
             series_name = (
-                data.get("SeriesName") or
-                data.get("series_name") or
-                data.get("show_name") or
-                data.get("ShowName", "")
+                data.get("SeriesName")
+                or data.get("series_name")
+                or data.get("show_name")
+                or data.get("ShowName", "")
             )
 
             season_number = (
-                data.get("SeasonNumber") or
-                data.get("season_number") or
-                data.get("ParentIndexNumber") or
-                data.get("season", "")
+                data.get("SeasonNumber")
+                or data.get("season_number")
+                or data.get("ParentIndexNumber")
+                or data.get("season", "")
             )
 
             episode_number = (
-                data.get("EpisodeNumber") or
-                data.get("episode_number") or
-                data.get("IndexNumber") or
-                data.get("episode", "")
+                data.get("EpisodeNumber")
+                or data.get("episode_number")
+                or data.get("IndexNumber")
+                or data.get("episode", "")
             )
 
             # 如果是剧集类型但没有剧集名，使用item_name
@@ -67,30 +69,30 @@ class GenericProcessor(BaseMediaProcessor):
 
             # 提取年份
             year = (
-                data.get("Year") or
-                data.get("year") or
-                data.get("ProductionYear") or
-                data.get("production_year", "")
+                data.get("Year")
+                or data.get("year")
+                or data.get("ProductionYear")
+                or data.get("production_year", "")
             )
 
             # 提取简介
             overview = (
-                data.get("Overview") or
-                data.get("overview") or
-                data.get("summary") or
-                data.get("Summary") or
-                data.get("description") or
-                data.get("Description", "")
+                data.get("Overview")
+                or data.get("overview")
+                or data.get("summary")
+                or data.get("Summary")
+                or data.get("description")
+                or data.get("Description", "")
             )
             overview = self.clean_text(overview)
 
             # 提取时长
             runtime = ""
             runtime_ticks = (
-                data.get("RunTimeTicks") or
-                data.get("runtime_ticks") or
-                data.get("duration") or
-                0
+                data.get("RunTimeTicks")
+                or data.get("runtime_ticks")
+                or data.get("duration")
+                or 0
             )
 
             # 尝试不同的时长格式
@@ -105,12 +107,12 @@ class GenericProcessor(BaseMediaProcessor):
 
             # 提取图片URL
             image_url = (
-                data.get("image_url") or
-                data.get("ImageUrl") or
-                data.get("poster_url") or
-                data.get("PosterUrl") or
-                data.get("thumbnail") or
-                data.get("Thumbnail", "")
+                data.get("image_url")
+                or data.get("ImageUrl")
+                or data.get("poster_url")
+                or data.get("PosterUrl")
+                or data.get("thumbnail")
+                or data.get("Thumbnail", "")
             )
 
             result = self.create_standard_data(
@@ -123,7 +125,7 @@ class GenericProcessor(BaseMediaProcessor):
                 overview=overview,
                 runtime=runtime,
                 image_url=image_url,
-                source_data="generic"
+                source_data="generic",
             )
 
             logger.debug(f"通用转换结果: {result}")
@@ -169,7 +171,7 @@ class GenericProcessor(BaseMediaProcessor):
             "book": "Book",
             "图书": "Book",
             "audiobook": "AudioBook",
-            "有声书": "AudioBook"
+            "有声书": "AudioBook",
         }
 
         # 尝试直接匹配
@@ -198,7 +200,7 @@ class GenericProcessor(BaseMediaProcessor):
             "directors": ["directors", "Directors", "director", "Director"],
             "studios": ["studios", "Studios", "studio", "Studio", "network", "Network"],
             "language": ["language", "Language", "lang", "Lang"],
-            "country": ["country", "Country", "origin", "Origin"]
+            "country": ["country", "Country", "origin", "Origin"],
         }
 
         for meta_key, possible_fields in metadata_fields.items():

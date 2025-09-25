@@ -3,14 +3,15 @@
 负责管理和调度不同的媒体处理器
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
+
 from astrbot.api import logger
 
 from .base_processor import BaseMediaProcessor
 from .emby_processor import EmbyProcessor
+from .generic_processor import GenericProcessor
 from .jellyfin_processor import JellyfinProcessor
 from .plex_processor import PlexProcessor
-from .generic_processor import GenericProcessor
 
 
 class ProcessorManager:
@@ -22,7 +23,7 @@ class ProcessorManager:
             EmbyProcessor(),
             JellyfinProcessor(),
             PlexProcessor(),
-            GenericProcessor()  # 通用处理器放在最后
+            GenericProcessor(),  # 通用处理器放在最后
         ]
 
         logger.info("媒体处理器管理器初始化完成")
@@ -50,7 +51,7 @@ class ProcessorManager:
             "emby": EmbyProcessor,
             "jellyfin": JellyfinProcessor,
             "plex": PlexProcessor,
-            "generic": GenericProcessor
+            "generic": GenericProcessor,
         }
 
         processor_class = processor_map.get(source.lower())
@@ -60,7 +61,9 @@ class ProcessorManager:
         logger.warning(f"未找到源 '{source}' 的处理器，使用通用处理器")
         return GenericProcessor()
 
-    def convert_to_standard(self, data: dict, source: str = None, headers: Optional[dict] = None) -> dict:
+    def convert_to_standard(
+        self, data: dict, source: str = None, headers: Optional[dict] = None
+    ) -> dict:
         """将数据转换为标准格式"""
         try:
             # 如果没有指定源，自动检测
@@ -97,30 +100,26 @@ class ProcessorManager:
 
     def get_processor_info(self) -> Dict[str, Any]:
         """获取处理器信息"""
-        info = {
-            "total_processors": len(self.processors),
-            "processors": []
-        }
+        info = {"total_processors": len(self.processors), "processors": []}
 
         for processor in self.processors:
             processor_info = {
                 "name": processor.__class__.__name__,
                 "source_name": processor.get_source_name(),
-                "description": processor.__doc__ or "无描述"
+                "description": processor.__doc__ or "无描述",
             }
             info["processors"].append(processor_info)
 
         return info
 
-    def test_processor(self, source: str, test_data: dict, headers: Optional[dict] = None) -> Dict[str, Any]:
+    def test_processor(
+        self, source: str, test_data: dict, headers: Optional[dict] = None
+    ) -> Dict[str, Any]:
         """测试指定处理器"""
         try:
             processor = self.get_processor(source)
             if not processor:
-                return {
-                    "success": False,
-                    "error": f"未找到源 '{source}' 的处理器"
-                }
+                return {"success": False, "error": f"未找到源 '{source}' 的处理器"}
 
             # 测试检测能力
             can_handle = processor.can_handle(test_data, headers)
@@ -130,7 +129,9 @@ class ProcessorManager:
             conversion_success = False
             if can_handle:
                 result = processor.convert_to_standard(test_data, headers)
-                conversion_success = bool(result and processor.validate_standard_data(result))
+                conversion_success = bool(
+                    result and processor.validate_standard_data(result)
+                )
 
             return {
                 "success": True,
@@ -138,14 +139,11 @@ class ProcessorManager:
                 "source_name": processor.get_source_name(),
                 "can_handle": can_handle,
                 "conversion_success": conversion_success,
-                "result": result
+                "result": result,
             }
 
         except Exception as e:
-            return {
-                "success": False,
-                "error": str(e)
-            }
+            return {"success": False, "error": str(e)}
 
     def add_processor(self, processor: BaseMediaProcessor, priority: int = None):
         """添加自定义处理器"""
