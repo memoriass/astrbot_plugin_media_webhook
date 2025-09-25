@@ -29,35 +29,11 @@
     "hint": "达到此数量时使用合并转发，否则单独发送",
     "default": 3
   },
-  "webhook_path": {
-    "description": "Webhook路径",
-    "type": "string",
-    "hint": "HTTP服务器的接收路径",
-    "default": "/media-webhook"
-  },
   "platform_name": {
     "description": "消息平台名称",
     "type": "string",
-    "hint": "发送消息的平台名称，如 aiocqhttp、telegram 等",
-    "default": "aiocqhttp"
-  },
-  "force_individual_send": {
-    "description": "强制单独发送",
-    "type": "bool",
-    "hint": "是否强制使用单独发送模式，即使达到批量发送条件",
-    "default": false
-  },
-  "show_platform_prefix": {
-    "description": "显示平台前缀",
-    "type": "bool",
-    "hint": "是否在消息中显示发送平台的前缀图标",
-    "default": true
-  },
-  "show_source_info": {
-    "description": "显示通知来源",
-    "type": "bool",
-    "hint": "是否在消息中显示通知来源信息（如Jellyfin、Emby等）",
-    "default": true
+    "hint": "发送消息的平台名称，如 llonebot、aiocqhttp、telegram 等",
+    "default": "llonebot"
   },
   "tmdb_api_key": {
     "description": "TMDB API Key",
@@ -69,18 +45,6 @@
     "description": "Fanart.tv API Key",
     "type": "string",
     "hint": "用于获取高质量海报和背景图的 Fanart.tv API 密钥，作为 TMDB 图片的降级选项，留空则跳过 Fanart 查询",
-    "default": ""
-  },
-  "enable_image_fallback": {
-    "description": "启用图片降级获取",
-    "type": "bool",
-    "hint": "当原始数据无图片时，是否尝试从 TMDB 和 Fanart.tv 获取图片",
-    "default": true
-  },
-  "adapter_type": {
-    "description": "适配器类型",
-    "type": "string",
-    "hint": "指定使用的协议适配器类型，留空则根据平台名称自动推断。可选值：napcat、llonebot、generic",
     "default": ""
   },
   "sender_id": {

@@ -38,7 +38,6 @@ class MediaWebhookPlugin(Star):
         self.cache_ttl_seconds = config.get("cache_ttl_seconds", 300)
 
         # 适配器配置
-        self.adapter_type = config.get("adapter_type", None)  # 如果为None则自动推断
         self.sender_id = config.get("sender_id", "2659908767")
         self.sender_name = config.get("sender_name", "媒体通知")
 
@@ -583,6 +582,8 @@ class MediaWebhookPlugin(Star):
         unified_msg_origin = f"{self.platform_name}:GroupMessage:{group_id}"
 
         logger.info(f"发送单独消息: {len(messages)} 条消息")
+        logger.info(f"目标群组ID: {group_id}")
+        logger.info(f"统一消息来源: {unified_msg_origin}")
 
         for i, msg in enumerate(messages, 1):
             try:
@@ -598,8 +599,9 @@ class MediaWebhookPlugin(Star):
                 # 创建消息链
                 message_chain = MessageChain(content_list)
 
+                logger.info(f"准备发送消息 {i}: {msg.get('message_text', '')[:50]}...")
                 await self.context.send_message(unified_msg_origin, message_chain)
-                logger.debug(f"✅ 消息 {i}/{len(messages)} 发送成功")
+                logger.info(f"✅ 消息 {i}/{len(messages)} 发送成功")
 
                 # 添加延迟避免频率限制
                 if i < len(messages):
@@ -607,6 +609,7 @@ class MediaWebhookPlugin(Star):
 
             except Exception as e:
                 logger.error(f"❌ 消息 {i} 发送失败: {e}")
+                logger.error(f"错误详情: {e}", exc_info=True)
 
     @filter.command("webhook status")
     async def webhook_status(self, event: AstrMessageEvent):
@@ -619,9 +622,7 @@ class MediaWebhookPlugin(Star):
 
         # 获取适配器信息
         try:
-            adapter = AdapterFactory.create_adapter(
-                self.platform_name, self.adapter_type
-            )
+            adapter = AdapterFactory.create_adapter(self.platform_name)
             adapter_info = adapter.get_adapter_info()
             adapter_name = adapter_info.get("name", "Unknown")
             adapter_features = ", ".join(adapter_info.get("features", []))
@@ -642,7 +643,7 @@ class MediaWebhookPlugin(Star):
 
 🔧 适配器状态:
   📡 当前适配器: {adapter_name}
-  🎛️ 配置类型: {self.adapter_type or "自动推断"}
+  🎛️ 配置类型: 自动推断
   👤 发送者: {self.sender_name} ({self.sender_id})
   ✨ 支持功能: {adapter_features}
 

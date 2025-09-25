@@ -11,15 +11,12 @@ class AdapterFactory:
     """适配器工厂类"""
 
     @staticmethod
-    def create_adapter(
-        platform_name: str, adapter_type: str | None = None
-    ) -> BaseAdapter:
+    def create_adapter(platform_name: str) -> BaseAdapter:
         """
-        根据平台名称和适配器类型创建适配器实例
+        根据平台名称创建适配器实例
 
         Args:
             platform_name: 平台名称
-            adapter_type: 适配器类型，如果为None则根据平台名称自动推断
 
         Returns:
             适配器实例
@@ -29,9 +26,8 @@ class AdapterFactory:
         from .llonebot_adapter import LLOneBotAdapter
         from .napcat_adapter import NapCatAdapter
 
-        # 如果没有指定适配器类型，根据平台名称自动推断
-        if adapter_type is None:
-            adapter_type = AdapterFactory._infer_adapter_type(platform_name)
+        # 根据平台名称自动推断适配器类型
+        adapter_type = AdapterFactory._infer_adapter_type(platform_name)
 
         # 根据适配器类型创建实例
         if adapter_type == AdapterType.NAPCAT:
