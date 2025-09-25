@@ -543,17 +543,26 @@ class MediaWebhookPlugin(Star):
                 # 构建单个节点的内容
                 content_list = []
 
+                # 调试：打印消息内容
+                logger.info(f"处理消息: {msg}")
+
                 # 添加图片（如果有）
                 if msg.get("image_url"):
-                    content_list.append(Comp.Image.fromURL(msg["image_url"]))
+                    logger.info(f"添加图片到节点: {msg['image_url']}")
+                    image_comp = Comp.Image.fromURL(msg["image_url"])
+                    content_list.append(image_comp)
+                    logger.info(f"图片组件创建成功: {type(image_comp)}")
+                else:
+                    logger.info(f"消息中没有图片URL: {msg.keys()}")
 
                 # 添加文本
                 content_list.append(Comp.Plain(msg["message_text"]))
+                logger.info(f"节点内容列表: {len(content_list)} 个组件")
 
                 # 创建节点
                 node = Comp.Node(
-                    user_id=self.sender_id,
-                    nickname=self.sender_name,
+                    uin=self.sender_id,
+                    name=self.sender_name,
                     content=content_list,
                 )
                 nodes.append(node)
