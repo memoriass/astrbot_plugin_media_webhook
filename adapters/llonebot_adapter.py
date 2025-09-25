@@ -90,7 +90,7 @@ class LLOneBotAdapter(BaseAdapter):
         Returns:
             LLOneBot 格式的转发节点
         """
-        # 构建消息内容
+        # 构建消息内容 - 根据 go-cqhttp 标准，content 应该是消息段数组
         content = []
 
         # 添加图片（如果有）
@@ -102,10 +102,19 @@ class LLOneBotAdapter(BaseAdapter):
         if message_text:
             content.append({"type": "text", "data": {"text": message_text}})
 
-        # 构建 LLOneBot 转发节点格式（与go-cqhttp标准兼容）
+        # 如果没有任何内容，添加默认文本
+        if not content:
+            content.append({"type": "text", "data": {"text": "[媒体通知]"}})
+
+        # 构建 LLOneBot 转发节点格式（严格按照 go-cqhttp 标准）
+        # 注意：uin 应该是字符串格式，name 是发送者昵称，content 是消息段数组
         return {
             "type": "node",
-            "data": {"uin": sender_id, "name": sender_name, "content": content},
+            "data": {
+                "uin": str(sender_id),  # 确保是字符串格式
+                "name": sender_name,
+                "content": content,
+            },
         }
 
     def get_adapter_info(self) -> dict[str, Any]:

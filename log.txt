@@ -1,0 +1,214 @@
+
+2025-09-25 09:35:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 09:36:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 09:37:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 09:38:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 09:39:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 09:40:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 09:41:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 09:42:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 09:43:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 09:44:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 09:45:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 09:46:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 09:47:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 09:48:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 09:49:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 09:50:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 09:51:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 09:52:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 09:53:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 09:54:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 09:55:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 09:56:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 09:57:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 09:58:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 09:59:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 10:00:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 10:01:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 10:02:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 10:03:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 10:04:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 10:05:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 10:06:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 10:07:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 10:08:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 10:09:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 10:10:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 10:11:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 10:12:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+10:13:30.742 › [1997157cb16][hot update] ----- startUpdate -----
+10:13:30.747 › [1997157cb16][hot update] hotUpdateApi checkHasMultipleQQ:  false
+10:13:30.748 › [1997157cb16][hot update] hotUpdateApi start check  3.2.19-39038  IsOnErrorVersion
+10:13:30.748 › [1997157cb16][hot update] hotUpdateApi checkIsOnErrorVersion result: false
+10:13:30.749 › [1997157cb16][hot update] [startUpdate] is fullUpdate: false
+10:13:31.752 › [1997157cb16][hot update] hotUpdateApi deleteNewVersionDir is: true  dir: /root/.config/QQ/versions/3.2.19-39038
+10:13:31.890 › [1997157cb16][hot update] hotUpdateApi start initStatus
+10:13:31.890 › [1997157cb16][hot update] onStatusChanged status:  IDLE
+10:13:31.890 › [1997157cb16][hot update] hotUpdateApi start updateInfo:  {
+  packageUrl: '/hotUpdate_new/release/linux-x64/3.2.19-39038/65447666/3.2.19-39038.zip.zip',
+  fruitadeUrl: '',
+  patchUrl: '/hotUpdate_new/release/linux-x64/3.2.19-39038/65447666/3.2.18-37475-3.2.19-39038.patch',
+  newVersion: '3.2.19-39038',
+  curVersion: '3.2.18-37475',
+  newVersionPackageMD5: 'ef5087b86e7004452992ba31b99cd2b2',
+  useStreamUnzip: true,
+  tryIpv6first: true
+}
+10:13:31.891 › [1997157cb16][hot update] onUpdateStart updateInfo:  {
+  packageUrl: '/hotUpdate_new/release/linux-x64/3.2.19-39038/65447666/3.2.19-39038.zip.zip',
+  fruitadeUrl: '',
+  patchUrl: '/hotUpdate_new/release/linux-x64/3.2.19-39038/65447666/3.2.18-37475-3.2.19-39038.patch',
+  newVersion: '3.2.19-39038',
+  curVersion: '3.2.18-37475',
+  newVersionPackageMD5: 'ef5087b86e7004452992ba31b99cd2b2',
+  useStreamUnzip: true,
+  tryIpv6first: true
+}
+10:13:31.891 › [1997157cb16][hot update] onChainStatusChanged chainName: CHECK_NEW_VERSION_PACKAGE  status:  start
+10:13:31.891 › [1997157cb16][hot update] onUpdateDownloaded /root/.config/QQ/versions/3.2.19-39038.zip
+10:13:36.553 › [1997157cb16][hot update] onPackageReady packageDirPath:  /root/.config/QQ/versions/3.2.19-39038.zip
+10:13:36.554 › [1997157cb16][hot update] onChainStatusChanged chainName: CHECK_NEW_VERSION_PACKAGE  status:  escaped
+10:13:36.554 › [1997157cb16][hot update] onStatusChanged status:  READY
+2025-09-25 10:13:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 10:14:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 10:15:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 10:16:37 | [收-群] 测试群(374274729) 零(924781982)：
+。
+
+
+2025-09-25 10:16:37 | WebSocket 事件上报 ws://192.168.1.200:6199/ws message.group
+
+
+2025-09-25 10:16:42 | [收-群] 测试群(374274729) 零(924781982)：
+/状态
+
+
+2025-09-25 10:16:42 | WebSocket 事件上报 ws://192.168.1.200:6199/ws message.group
+
+
+2025-09-25 10:16:46 | 收到反向 Websocket 消息 { action: 'send_group_msg', params: { group_id: 374274729, message: [ { type: 'image', data: { file: 'base64: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...
+
+
+2025-09-25 10:16:46 | 图片信息 { md5HexStr: '8f8342bb7e1f3c23d517dc7f68924000', fileSize: '692661', picWidth: 1080, picHeight: 1814, fileName: '7cb738ec-a5f5-4317-a695-ed05691dc2ee.png', sourcePath: '/root/.config/QQ/nt_qq_f11abdebf0616d077fc79d479a0adba7/nt_data/Pic/2025-09/Ori/8f8342bb7e1f3c23d517dc7f68924000.png', original: true, picType: 1000, picSubType: 0, fileUuid: '', fileSubId: '', thumbFileSize: 0, summary: '', isFlashPic: false }
+
+
+2025-09-25 10:16:47 | [发-群] 测试群(374274729) mili(3902422198)：
+[图片]8F8342BB7E1F3C23D517DC7F68924000.png
+
+
+
+2025-09-25 10:16:47 | 消息发送 { chatType: 2, peerUid: '374274729', guildId: '' }
+
+
+Executed sendPB: OidbSvcTrpcTcp.0x9067_202
+2025-09-25 10:16:47 | 发包获取rkey成功,private:&rkey=CAISMHkub-2lz_4YRNgK9ChjE_iSb2fapj6oKbCIQmGMcjRvSszwMYbeRMaze5gbw3NcbA, group:&rkey=CAMSMGqsDenkmvO0dUsT4VsMXJR3p81pWrTXhsagqY8nQXDntxw7syVCpaNfyk9wrvKe2Q
+
+
+2025-09-25 10:16:47 | WebSocket 事件上报 ws://192.168.1.200:6199/ws message_sent.group
+
+
+2025-09-25 10:16:53 | [收-群] 测试群(374274729) ⑨(3157507754)：
+[图片]26232B9348A23732150827A8097D5B23.png
+
+
+
+2025-09-25 10:16:53 | WebSocket 事件上报 ws://192.168.1.200:6199/ws message.group
+
+
+2025-09-25 10:16:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+[302:0925/101731.165843:INFO:perf_util.cc(170)] NotifyLowPerformance: dropped_frame_count=0, task_jank_count=1, severe_jank_count=0, severe_jank_duration=0
+2025-09-25 10:17:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 10:18:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 10:19:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event
+
+
+2025-09-25 10:20:57 | WebSocket 事件上报 ws://192.168.1.200:6199/ws meta_event

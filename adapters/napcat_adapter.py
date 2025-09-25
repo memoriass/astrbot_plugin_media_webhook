@@ -101,6 +101,10 @@ class NapCatAdapter(BaseAdapter):
         if message_text:
             content.append({"type": "text", "data": {"text": message_text}})
 
+        # 如果没有任何内容，添加默认文本
+        if not content:
+            content.append({"type": "text", "data": {"text": "[媒体通知]"}})
+
         # 构建 NapCat 转发节点格式
         return {
             "type": "node",
