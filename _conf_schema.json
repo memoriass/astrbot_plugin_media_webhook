@@ -32,8 +32,8 @@
   "platform_name": {
     "description": "消息平台名称",
     "type": "string",
-    "hint": "发送消息的平台名称，如 llonebot、aiocqhttp、telegram 等",
-    "default": "llonebot"
+    "hint": "发送消息的平台名称。设置为 'auto' 时自动检测可用平台，或手动指定如 llonebot、napcat、aiocqhttp、telegram 等",
+    "default": "auto"
   },
   "tmdb_api_key": {
     "description": "TMDB API Key",

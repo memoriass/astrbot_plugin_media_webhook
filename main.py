@@ -32,7 +32,7 @@ class MediaWebhookPlugin(Star):
         # 核心配置
         self.webhook_port = config.get("webhook_port", 60071)
         self.group_id = config.get("group_id", "")
-        self.platform_name = config.get("platform_name", "aiocqhttp")
+        self.platform_name = config.get("platform_name", "auto")
         self.batch_min_size = config.get("batch_min_size", 3)
         self.batch_interval_seconds = config.get("batch_interval_seconds", 300)
         self.cache_ttl_seconds = config.get("cache_ttl_seconds", 300)
@@ -303,7 +303,7 @@ class MediaWebhookPlugin(Star):
         """直接发送 Ani-RSS 消息（独立处理，不进入批量处理器）"""
         try:
             group_id = str(self.group_id).replace(":", "_")
-            unified_msg_origin = f"{self.platform_name}:GroupMessage:{group_id}"
+            unified_msg_origin = f"{self.get_effective_platform_name()}:GroupMessage:{group_id}"
 
             # 记录日志
             has_image = bool(message_payload.get("image_url"))
@@ -336,7 +336,7 @@ class MediaWebhookPlugin(Star):
         """在批量处理器中独立发送单条 Ani-RSS 消息"""
         try:
             group_id = str(self.group_id).replace(":", "_")
-            unified_msg_origin = f"{self.platform_name}:GroupMessage:{group_id}"
+            unified_msg_origin = f"{self.get_effective_platform_name()}:GroupMessage:{group_id}"
 
             # 记录日志
             has_image = bool(message_payload.get("image_url"))
@@ -442,19 +442,20 @@ class MediaWebhookPlugin(Star):
     async def send_media_messages_intelligently(self, media_messages: list):
         """智能发送标准媒体消息（根据协议端选择最优发送模式）"""
         try:
-            platform_lower = self.platform_name.lower()
+            effective_platform = self.get_effective_platform_name()
+            platform_lower = effective_platform.lower()
             message_count = len(media_messages)
 
             logger.info(
-                f"智能发送 {message_count} 条媒体消息 [平台: {self.platform_name}]"
+                f"智能发送 {message_count} 条媒体消息 [平台: {effective_platform}]"
             )
 
             # 根据消息数量选择发送模式（所有协议端统一使用 AstrBot pipeline）
             if message_count >= self.batch_min_size:
-                logger.info(f"使用 {self.platform_name} 批量发送模式（合并转发）")
+                logger.info(f"使用 {effective_platform} 批量发送模式（合并转发）")
                 await self.send_batch_messages(media_messages)
             else:
-                logger.info(f"使用 {self.platform_name} 单独发送模式")
+                logger.info(f"使用 {effective_platform} 单独发送模式")
                 await self.send_individual_messages(media_messages)
 
         except Exception as e:
@@ -531,7 +532,7 @@ class MediaWebhookPlugin(Star):
     async def send_batch_messages(self, messages: list[dict]):
         """发送合并转发消息（使用 AstrBot pipeline）"""
         group_id = str(self.group_id).replace(":", "_")
-        unified_msg_origin = f"{self.platform_name}:GroupMessage:{group_id}"
+        unified_msg_origin = f"{self.get_effective_platform_name()}:GroupMessage:{group_id}"
 
         logger.info(f"发送合并转发: {len(messages)} 条消息 [使用 AstrBot pipeline]")
 
@@ -579,7 +580,7 @@ class MediaWebhookPlugin(Star):
     async def send_individual_messages(self, messages: list[dict]):
         """发送单独消息"""
         group_id = str(self.group_id).replace(":", "_")
-        unified_msg_origin = f"{self.platform_name}:GroupMessage:{group_id}"
+        unified_msg_origin = f"{self.get_effective_platform_name()}:GroupMessage:{group_id}"
 
         logger.info(f"发送单独消息: {len(messages)} 条消息")
         logger.info(f"目标群组ID: {group_id}")
@@ -622,7 +623,7 @@ class MediaWebhookPlugin(Star):
 
         # 获取适配器信息
         try:
-            adapter = AdapterFactory.create_adapter(self.platform_name)
+            adapter = AdapterFactory.create_adapter(self.get_effective_platform_name())
             adapter_info = adapter.get_adapter_info()
             adapter_name = adapter_info.get("name", "Unknown")
             adapter_features = ", ".join(adapter_info.get("features", []))
@@ -639,7 +640,7 @@ class MediaWebhookPlugin(Star):
 ⚙️ 批量阈值: {self.batch_min_size} 条
 ⏱️ 批量间隔: {self.batch_interval_seconds} 秒
 🎯 目标群组: {self.group_id or "未配置"}
-🤖 协议平台: {self.platform_name}
+🤖 协议平台: {self.platform_name} {'(自动检测: ' + self.get_effective_platform_name() + ')' if self.platform_name == 'auto' else ''}
 
 🔧 适配器状态:
   📡 当前适配器: {adapter_name}
@@ -666,3 +667,44 @@ class MediaWebhookPlugin(Star):
             logger.info("Media Webhook 服务已停止")
         except Exception as e:
             logger.error(f"停止 Webhook 服务时出错: {e}")
+
+    def get_available_platforms(self) -> list[dict]:
+        """获取当前可用的平台列表"""
+        platforms = []
+        for platform_inst in self.context.platform_manager.platform_insts:
+            platform_meta = platform_inst.meta()
+            platforms.append({
+                "id": platform_meta.id,
+                "name": platform_meta.name,
+                "description": platform_meta.description
+            })
+        return platforms
+
+    def auto_detect_platform(self) -> str:
+        """自动检测最合适的平台"""
+        available_platforms = self.get_available_platforms()
+
+        if not available_platforms:
+            logger.warning("未找到任何可用平台，使用默认值 llonebot")
+            return "llonebot"
+
+        # 优先级顺序：llonebot > napcat > aiocqhttp > 其他
+        priority_order = ["llonebot", "napcat", "aiocqhttp"]
+
+        # 按优先级查找
+        for priority_name in priority_order:
+            for platform in available_platforms:
+                if priority_name in platform["name"].lower() or priority_name in platform["id"].lower():
+                    logger.info(f"自动检测到平台: {platform['id']} ({platform['name']})")
+                    return platform["id"]
+
+        # 如果没有找到优先级平台，使用第一个可用平台
+        first_platform = available_platforms[0]
+        logger.info(f"使用第一个可用平台: {first_platform['id']} ({first_platform['name']})")
+        return first_platform["id"]
+
+    def get_effective_platform_name(self) -> str:
+        """获取有效的平台名称（处理auto模式）"""
+        if self.platform_name == "auto":
+            return self.auto_detect_platform()
+        return self.platform_name
