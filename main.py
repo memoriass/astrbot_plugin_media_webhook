@@ -450,23 +450,13 @@ class MediaWebhookPlugin(Star):
                 f"智能发送 {message_count} 条媒体消息 [平台: {self.platform_name}]"
             )
 
-            # aiocqhttp 优选 API 发送模式（合并转发）
-            if platform_lower == "aiocqhttp":
-                if message_count >= self.batch_min_size:
-                    logger.info("使用 aiocqhttp API 批量发送模式（合并转发）")
-                    await self.send_batch_messages(media_messages)
-                else:
-                    logger.info("使用 aiocqhttp API 单独发送模式")
-                    await self.send_individual_messages(media_messages)
-
-            # 其他协议端根据消息数量选择
+            # 根据消息数量选择发送模式（所有协议端统一使用 AstrBot pipeline）
+            if message_count >= self.batch_min_size:
+                logger.info(f"使用 {self.platform_name} 批量发送模式（合并转发）")
+                await self.send_batch_messages(media_messages)
             else:
-                if message_count >= self.batch_min_size:
-                    logger.info(f"使用 {self.platform_name} 批量发送模式")
-                    await self.send_batch_messages(media_messages)
-                else:
-                    logger.info(f"使用 {self.platform_name} 单独发送模式")
-                    await self.send_individual_messages(media_messages)
+                logger.info(f"使用 {self.platform_name} 单独发送模式")
+                await self.send_individual_messages(media_messages)
 
         except Exception as e:
             logger.error(f"智能发送媒体消息失败: {e}")
@@ -540,73 +530,51 @@ class MediaWebhookPlugin(Star):
             self.last_batch_time = time.time()
 
     async def send_batch_messages(self, messages: list[dict]):
-        """发送合并转发消息（直接调用协议端API）"""
+        """发送合并转发消息（使用 AstrBot pipeline）"""
         group_id = str(self.group_id).replace(":", "_")
+        unified_msg_origin = f"{self.platform_name}:GroupMessage:{group_id}"
 
-        logger.info(f"发送合并转发: {len(messages)} 条消息")
+        logger.info(f"发送合并转发: {len(messages)} 条消息 [使用 AstrBot pipeline]")
 
         try:
-            # 获取协议端bot实例
-            bot_client = None
-            platform_instance = None
-            for platform in self.context.platform_manager.platform_insts:
-                platform_meta = platform.meta()
-                logger.debug(f"检查平台: {platform_meta.name}")
-                if platform_meta.name == self.platform_name:
-                    bot_client = platform.get_client()
-                    platform_instance = platform
-                    break
+            # 构建转发节点
+            nodes = []
+            for msg in messages:
+                # 构建单个节点的内容
+                content_list = []
 
-            if not bot_client:
-                logger.error(f"未找到 {self.platform_name} 平台实例")
-                logger.info("尝试使用第一个可用的平台实例")
-                # 尝试使用第一个可用的平台
-                if self.context.platform_manager.platform_insts:
-                    platform_instance = self.context.platform_manager.platform_insts[0]
-                    bot_client = platform_instance.get_client()
-                    logger.info(f"使用平台: {platform_instance.meta().name}")
+                # 添加图片（如果有）
+                if msg.get("image_url"):
+                    content_list.append(Comp.Image.fromURL(msg["image_url"]))
 
-                if not bot_client:
-                    logger.error("没有可用的平台实例")
-                    await self.send_individual_messages(messages)
-                    return
+                # 添加文本
+                content_list.append(Comp.Plain(msg["message_text"]))
 
-            # 创建适配器实例
-            actual_platform_name = (
-                platform_instance.meta().name
-                if platform_instance
-                else self.platform_name
-            )
-            adapter = AdapterFactory.create_adapter(
-                actual_platform_name, self.adapter_type
-            )
-
-            logger.info(f"使用适配器: {adapter.__class__.__name__}")
-
-            # 使用适配器发送消息
-            result = await adapter.send_forward_messages(
-                bot_client=bot_client,
-                group_id=group_id,
-                messages=messages,
-                sender_id=self.sender_id,
-                sender_name=self.sender_name,
-            )
-
-            if result.get("success"):
-                logger.info(
-                    f"✅ 适配器发送成功，消息ID: {result.get('message_id', 'N/A')}"
+                # 创建节点
+                node = Comp.Node(
+                    user_id=self.sender_id,
+                    nickname=self.sender_name,
+                    content=content_list,
                 )
+                nodes.append(node)
+
+            # 构建消息链
+            if len(nodes) == 1:
+                # 单个节点直接发送内容
+                message_chain = MessageChain(nodes[0].content)
             else:
-                logger.error(
-                    f"❌ 适配器发送失败: {result.get('error', 'Unknown error')}"
-                )
-                # 回退到单独发送
-                await self.send_individual_messages(messages)
+                # 多个节点使用 Nodes 组件
+                message_chain = MessageChain([Comp.Nodes(nodes=nodes)])
+
+            # 通过 AstrBot pipeline 发送消息
+            await self.context.send_message(unified_msg_origin, message_chain)
+            logger.info(f"✅ 合并转发发送成功 [通过 AstrBot pipeline]")
 
         except Exception as e:
             logger.error(f"发送合并转发失败: {e}")
             logger.debug(f"合并转发失败详情: {e}", exc_info=True)
             # 回退到单独发送
+            logger.info("回退到单独发送模式")
             await self.send_individual_messages(messages)
 
     async def send_individual_messages(self, messages: list[dict]):
