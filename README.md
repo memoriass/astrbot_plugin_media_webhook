@@ -2,12 +2,6 @@
 
 为 AstrBot 提供媒体服务器通知功能。原始逻辑来自 @CikeyQi
 
-**媒体服务器设置**：
-```
-Webhook URL: http://your-bot-server:60071/media-webhook
-```
-
-
 ## 使用说明
 
 1. **在媒体服务器中设置 Webhook URL**
