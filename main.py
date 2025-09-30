@@ -555,17 +555,23 @@ class MediaWebhookPlugin(Star):
         try:
             # 构建转发节点
             nodes = []
-            for msg in messages:
+            for i, msg in enumerate(messages, 1):
                 # 构建单个节点的内容
                 content_list = []
 
                 # 添加图片（如果有）
-                if msg.get("image_url"):
-                    image_comp = Comp.Image.fromURL(msg["image_url"])
+                image_url = msg.get("image_url")
+                if image_url:
+                    logger.info(f"  消息 {i}: 添加图片 URL={image_url[:50]}...")
+                    image_comp = Comp.Image.fromURL(image_url)
                     content_list.append(image_comp)
+                else:
+                    logger.info(f"  消息 {i}: 无图片")
 
                 # 添加文本
-                content_list.append(Comp.Plain(msg["message_text"]))
+                message_text = msg["message_text"]
+                logger.info(f"  消息 {i}: 添加文本 (长度={len(message_text)})")
+                content_list.append(Comp.Plain(message_text))
 
                 # 创建节点
                 node = Comp.Node(
@@ -573,6 +579,7 @@ class MediaWebhookPlugin(Star):
                     name=self.sender_name,
                     content=content_list,
                 )
+                logger.info(f"  消息 {i}: 节点创建完成，包含 {len(content_list)} 个组件")
                 nodes.append(node)
 
             # 构建消息链
