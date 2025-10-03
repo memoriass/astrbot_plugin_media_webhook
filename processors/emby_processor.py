@@ -67,24 +67,40 @@ class EmbyProcessor(BaseMediaProcessor):
 
             # 提取图片信息
             image_url = ""
-            image_tags = item.get("ImageTags", {})
-            logger.debug(f"Emby ImageTags: {image_tags}")
+            server_info = data.get("Server", {})
+            server_url = server_info.get("Url", "")
+            item_id = item.get("Id", "")
 
-            if image_tags.get("Primary"):
-                server_info = data.get("Server", {})
-                server_url = server_info.get("Url", "")
-                item_id = item.get("Id", "")
-                logger.debug(
-                    f"Emby 图片信息: server_url={server_url}, item_id={item_id}"
-                )
+            logger.debug(f"Emby 服务器信息: server_url={server_url}, item_id={item_id}")
 
+            # 方法1: 检查Emby webhook中的直接图片URL字段
+            # 某些Emby webhook配置会直接提供图片URL
+            direct_image_url = (
+                item.get("PrimaryImageUrl") or
+                item.get("ImageUrl") or
+                data.get("PrimaryImageUrl") or
+                data.get("ImageUrl")
+            )
+
+            if direct_image_url:
+                image_url = direct_image_url
+                logger.info(f"Emby 使用直接提供的图片URL: {image_url[:80]}...")
+
+            # 方法2: 检查ImageTags并构建URL
+            elif item.get("ImageTags", {}).get("Primary"):
                 if server_url and item_id:
                     # 确保服务器URL不以/结尾
                     server_url = server_url.rstrip("/")
                     image_url = f"{server_url}/Items/{item_id}/Images/Primary"
-                    logger.debug(f"Emby 构建的图片URL: {image_url}")
-                else:
-                    logger.debug("Emby 图片URL构建失败：缺少server_url或item_id")
+                    logger.info(f"Emby 通过ImageTags构建图片URL: {image_url}")
+
+            # 方法3: 如果ImageTags不存在，尝试直接构建URL（Emby总是有Primary图片）
+            elif server_url and item_id:
+                server_url = server_url.rstrip("/")
+                image_url = f"{server_url}/Items/{item_id}/Images/Primary"
+                logger.info(f"Emby ImageTags为空，尝试直接构建图片URL: {image_url}")
+            else:
+                logger.warning(f"Emby 图片URL构建失败：server_url={server_url}, item_id={item_id}")
 
             result = self.create_standard_data(
                 item_type=item_type,

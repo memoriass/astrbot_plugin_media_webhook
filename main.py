@@ -69,12 +69,19 @@ class MediaWebhookPlugin(Star):
 
         # 检查媒体处理器
         if self.media_handler:
-            tmdb_status = "TMDB: 是" if self.tmdb_api_key else "TMDB: 否"
-            working_modules.append(f"媒体处理器 ({tmdb_status})")
+            tmdb_status = "TMDB: 已启用" if self.tmdb_api_key else "TMDB: 未配置"
+            fanart_status = "Fanart: 已启用" if self.fanart_api_key else "Fanart: 未配置"
+            working_modules.append(f"媒体处理器 ({tmdb_status}, {fanart_status})")
+
+            # 详细日志
+            if self.tmdb_api_key:
+                logger.info(f"[OK] TMDB API 密钥已配置: {self.tmdb_api_key[:8]}...")
+            else:
+                logger.warning("[WARN] TMDB API 密钥未配置，将使用媒体服务器原始图片")
 
         logger.info("媒体 Webhook 插件子模块初始化完成:")
         for module in working_modules:
-            logger.info(f"  ✅ {module}: 工作正常")
+            logger.info(f"  [OK] {module}: 工作正常")
 
         # 消息队列和缓存
         self.message_queue: list[dict] = []
@@ -143,6 +150,18 @@ class MediaWebhookPlugin(Star):
             logger.info(f"  User-Agent: {headers.get('user-agent', 'N/A')}")
             logger.info(f"  Content-Type: {headers.get('content-type', 'N/A')}")
             logger.info(f"  请求体长度: {len(body_text)} 字符")
+
+            # 调试：打印原始数据的关键字段
+            try:
+                data_preview = json.loads(body_text)
+                logger.debug(f"原始数据键: {list(data_preview.keys())}")
+                if "Item" in data_preview:
+                    item = data_preview["Item"]
+                    logger.debug(f"Item键: {list(item.keys())}")
+                    logger.debug(f"ImageTags: {item.get('ImageTags', {})}")
+                    logger.debug(f"Server: {data_preview.get('Server', {})}")
+            except Exception:
+                pass
 
             # 将所有数据交由批量处理器检测和处理
             await self.add_raw_data_to_queue(body_text, headers)
@@ -477,7 +496,7 @@ class MediaWebhookPlugin(Star):
 
     async def start_batch_processor(self):
         """启动批量处理器（智能检测和发送所有消息类型）"""
-        logger.info("✅ 批量处理器: 工作正常")
+        logger.info("[OK] 批量处理器: 工作正常")
         while True:
             try:
                 await asyncio.sleep(self.batch_interval_seconds)
@@ -546,53 +565,80 @@ class MediaWebhookPlugin(Star):
     async def send_batch_messages(self, messages: list[dict]):
         """发送合并转发消息（使用 AstrBot pipeline）"""
         group_id = str(self.group_id).replace(":", "_")
-        unified_msg_origin = (
-            f"{self.get_effective_platform_name()}:GroupMessage:{group_id}"
-        )
 
-        logger.info(f"发送合并转发: {len(messages)} 条消息 [使用 AstrBot pipeline]")
+        logger.info(f"发送合并转发: {len(messages)} 条消息 [使用 LLOneBot 兼容模式]")
 
         try:
-            # 构建转发节点
-            nodes = []
-            for i, msg in enumerate(messages, 1):
-                # 构建单个节点的内容
-                content_list = []
+            # 使用自定义节点构建，避免 LLOneBot 的 base64 图片 bug
+            # LLOneBot 在处理合并转发中的 base64 图片时会报错：
+            # "Cannot read properties of undefined (reading 'result')"
+            # 解决方案：直接构建使用 URL 的节点字典，绕过 AstrBot 的 base64 转换
 
-                # 添加图片（如果有）
+            nodes_data = []
+            for i, msg in enumerate(messages, 1):
+                # 构建节点内容
+                content = []
+
+                # 调试：打印消息数据结构
+                logger.debug(f"  消息 {i} 数据键: {list(msg.keys())}")
+
+                # 添加图片（如果有）- 使用 URL 格式
                 image_url = msg.get("image_url")
                 if image_url:
-                    logger.info(f"  消息 {i}: 添加图片 URL={image_url[:50]}...")
-                    image_comp = Comp.Image.fromURL(image_url)
-                    content_list.append(image_comp)
+                    logger.info(f"  消息 {i}: 添加图片")
+                    logger.info(f"    图片URL: {image_url}")
+                    logger.info(f"    URL类型: {'TMDB' if 'tmdb.org' in image_url else 'Fanart' if 'fanart.tv' in image_url else 'Emby/Jellyfin' if '/Items/' in image_url else '其他'}")
+                    # 直接使用 URL 格式，避免 base64 转换
+                    content.append({
+                        "type": "image",
+                        "data": {"file": image_url}
+                    })
                 else:
-                    logger.info(f"  消息 {i}: 无图片")
+                    logger.warning(f"  消息 {i}: [WARN] 无图片URL")
+                    # 检查media_data中是否有图片信息
+                    media_data = msg.get("media_data", {})
+                    if media_data:
+                        alt_image_url = media_data.get("image_url")
+                        logger.debug(f"    media_data中的image_url: {alt_image_url}")
+                        tmdb_enriched = media_data.get("tmdb_enriched", False)
+                        logger.debug(f"    TMDB丰富状态: {tmdb_enriched}")
 
                 # 添加文本
                 message_text = msg["message_text"]
                 logger.info(f"  消息 {i}: 添加文本 (长度={len(message_text)})")
-                content_list.append(Comp.Plain(message_text))
+                content.append({
+                    "type": "text",
+                    "data": {"text": message_text}
+                })
 
-                # 创建节点
-                node = Comp.Node(
-                    uin=self.sender_id,
-                    name=self.sender_name,
-                    content=content_list,
-                )
-                logger.info(f"  消息 {i}: 节点创建完成，包含 {len(content_list)} 个组件")
-                nodes.append(node)
+                # 构建节点
+                node_data = {
+                    "type": "node",
+                    "data": {
+                        "user_id": str(self.sender_id),
+                        "nickname": self.sender_name,
+                        "content": content
+                    }
+                }
+                logger.info(f"  消息 {i}: 节点创建完成，包含 {len(content)} 个组件")
+                nodes_data.append(node_data)
 
-            # 构建消息链
-            if len(nodes) == 1:
-                # 单个节点直接发送内容
-                message_chain = MessageChain(nodes[0].content)
+            # 直接调用协议端 API，绕过 AstrBot 的消息组件转换
+            platform = self.context.get_platform_inst(self.get_effective_platform_name())
+            if platform:
+                bot = platform.get_client()
+                if bot is None:
+                    raise Exception("Bot 客户端未连接")
+
+                payload = {
+                    "group_id": int(group_id),
+                    "messages": nodes_data
+                }
+                logger.debug(f"发送合并转发 payload: {payload}")
+                await bot.call_action("send_group_forward_msg", **payload)
+                logger.info("[OK] 合并转发发送成功 [LLOneBot 兼容模式]")
             else:
-                # 多个节点使用 Nodes 组件
-                message_chain = MessageChain([Comp.Nodes(nodes=nodes)])
-
-            # 通过 AstrBot pipeline 发送消息
-            await self.context.send_message(unified_msg_origin, message_chain)
-            logger.info("✅ 合并转发发送成功 [通过 AstrBot pipeline]")
+                raise Exception(f"未找到平台: {self.get_effective_platform_name()}")
 
         except Exception as e:
             logger.error(f"发送合并转发失败: {e}")

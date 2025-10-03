@@ -60,12 +60,18 @@ class MediaHandler:
             # 2. 自动进行 TMDB 数据丰富（如果启用）
             if self.tmdb_enabled and self.tmdb_enricher:
                 logger.info("开始 TMDB 数据丰富")
+                logger.debug(f"  原始图片URL: {media_data.get('image_url', '无')}")
                 enriched_data = await self.tmdb_enricher.enrich_media_data(media_data)
                 if enriched_data.get("tmdb_enriched"):
                     media_data = enriched_data
-                    logger.info("TMDB 数据丰富成功")
+                    logger.info("[OK] TMDB 数据丰富成功")
+                    logger.info(f"  丰富后图片URL: {media_data.get('image_url', '无')}")
                 else:
                     logger.info("TMDB 数据丰富未找到匹配结果，使用原始数据")
+                    logger.info(f"  原始图片URL: {media_data.get('image_url', '无')}")
+            else:
+                logger.info("TMDB 未启用，使用原始媒体服务器数据")
+                logger.info(f"  原始图片URL: {media_data.get('image_url', '无')}")
 
             # 3. 生成标准消息载荷
             message_payload = self.create_message_payload(media_data, source)
@@ -129,9 +135,16 @@ class MediaHandler:
                 "timestamp": time.time(),
             }
 
-            logger.debug(
-                f"创建消息载荷: 图片URL={'有' if image_url else '无'}, 消息文本长度={len(message_text)}"
-            )
+            # 详细日志
+            if image_url:
+                image_source = self.detect_image_source(image_url, media_data)
+                logger.info(f"[MSG] 创建消息载荷: 包含图片 (来源: {image_source})")
+                logger.debug(f"  图片URL: {image_url}")
+            else:
+                logger.warning("[MSG] 创建消息载荷: [WARN] 无图片URL")
+                logger.debug(f"  media_data keys: {list(media_data.keys())}")
+
+            logger.debug(f"  消息文本长度: {len(message_text)}")
             return message_payload
 
         except Exception as e:
@@ -210,9 +223,9 @@ class MediaHandler:
 
             # 数据来源标记
             if data.get("tmdb_enriched"):
-                message_parts.append("✨ 数据来源: TMDB")
+                message_parts.append("[*] 数据来源: TMDB")
             elif data.get("bgm_enriched"):
-                message_parts.append("✨ 数据来源: BGM.TV")
+                message_parts.append("[*] 数据来源: BGM.TV")
 
             return "\n".join(message_parts)
 
@@ -265,9 +278,9 @@ class MediaHandler:
 
             # 数据来源标记
             if data.get("tmdb_enriched"):
-                message_parts.append("✨ 数据来源: TMDB")
+                message_parts.append("[*] 数据来源: TMDB")
             elif data.get("bgm_enriched"):
-                message_parts.append("✨ 数据来源: BGM.TV")
+                message_parts.append("[*] 数据来源: BGM.TV")
 
             return "\n".join(message_parts)
 
@@ -286,18 +299,18 @@ class MediaHandler:
 
             # 根据不同的图片来源生成不同的标记
             if image_source == "tmdb":
-                return "🖼️ [TMDB 海报]"
+                return "[IMG] [TMDB 海报]"
             if image_source == "fanart":
-                return "🖼️ [Fanart.tv 海报]"
+                return "[IMG] [Fanart.tv 海报]"
             if image_source == "jellyfin":
-                return "🖼️ [Jellyfin 海报]"
+                return "[IMG] [Jellyfin 海报]"
             if image_source == "emby":
-                return "🖼️ [Emby 海报]"
+                return "[IMG] [Emby 海报]"
             if image_source == "plex":
-                return "🖼️ [Plex 海报]"
+                return "[IMG] [Plex 海报]"
             if image_source == "local":
-                return "🖼️ [本地海报]"
-            return "🖼️ [海报图片]"
+                return "[IMG] [本地海报]"
+            return "[IMG] [海报图片]"
 
         except Exception as e:
             logger.error(f"生成图片行失败: {e}")
