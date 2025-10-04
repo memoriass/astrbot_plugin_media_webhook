@@ -76,10 +76,10 @@ class EmbyProcessor(BaseMediaProcessor):
             # 方法1: 检查Emby webhook中的直接图片URL字段
             # 某些Emby webhook配置会直接提供图片URL
             direct_image_url = (
-                item.get("PrimaryImageUrl") or
-                item.get("ImageUrl") or
-                data.get("PrimaryImageUrl") or
-                data.get("ImageUrl")
+                item.get("PrimaryImageUrl")
+                or item.get("ImageUrl")
+                or data.get("PrimaryImageUrl")
+                or data.get("ImageUrl")
             )
 
             if direct_image_url:
@@ -100,7 +100,9 @@ class EmbyProcessor(BaseMediaProcessor):
                 image_url = f"{server_url}/Items/{item_id}/Images/Primary"
                 logger.info(f"Emby ImageTags为空，尝试直接构建图片URL: {image_url}")
             else:
-                logger.warning(f"Emby 图片URL构建失败：server_url={server_url}, item_id={item_id}")
+                logger.warning(
+                    f"Emby 图片URL构建失败：server_url={server_url}, item_id={item_id}"
+                )
 
             result = self.create_standard_data(
                 item_type=item_type,

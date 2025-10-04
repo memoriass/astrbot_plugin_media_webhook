@@ -60,28 +60,49 @@ class MediaWebhookPlugin(Star):
         self.ani_rss_handler = AniRSSHandler()
         self.media_handler = MediaHandler(self.tmdb_api_key, self.fanart_api_key)
 
-        # 打印工作正常的子模块
-        working_modules = []
+        # 显示所有处理器状态
+        all_processors_ok = True
+        processor_details = []
 
-        # 检查 Ani-RSS 处理器
-        if self.ani_rss_handler:
-            working_modules.append("Ani-RSS 处理器")
-
-        # 检查媒体处理器
+        # 检查媒体处理器（包括 Emby、Jellyfin、Plex 等）
         if self.media_handler:
-            tmdb_status = "TMDB: 已启用" if self.tmdb_api_key else "TMDB: 未配置"
-            fanart_status = "Fanart: 已启用" if self.fanart_api_key else "Fanart: 未配置"
-            working_modules.append(f"媒体处理器 ({tmdb_status}, {fanart_status})")
+            stats = self.media_handler.get_processing_stats()
+            processor_info = stats.get("processor_info", {})
+            processors = processor_info.get("processors", [])
 
-            # 详细日志
+            # 显示各个媒体源处理器
+            for proc in processors:
+                source_name = proc.get("source_name", "unknown")
+                if source_name != "generic":  # 跳过通用处理器
+                    processor_details.append(source_name.title())
+
+            # TMDB 状态
+            tmdb_status = "已启用" if self.tmdb_api_key else "未配置"
+            fanart_status = "已启用" if self.fanart_api_key else "未配置"
+
             if self.tmdb_api_key:
                 logger.info(f"[OK] TMDB API 密钥已配置: {self.tmdb_api_key[:8]}...")
             else:
                 logger.warning("[WARN] TMDB API 密钥未配置，将使用媒体服务器原始图片")
+        else:
+            all_processors_ok = False
 
-        logger.info("媒体 Webhook 插件子模块初始化完成:")
-        for module in working_modules:
-            logger.info(f"  [OK] {module}: 工作正常")
+        # 检查 Ani-RSS 处理器
+        if self.ani_rss_handler:
+            processor_details.append("Ani-RSS")
+        else:
+            all_processors_ok = False
+
+        # 只有所有处理器都正常时才打印总状态
+        if all_processors_ok and processor_details:
+            processors_str = ", ".join(processor_details)
+            tmdb_status = "已启用" if self.tmdb_api_key else "未配置"
+            fanart_status = "已启用" if self.fanart_api_key else "未配置"
+            logger.info(
+                f"[OK] 媒体处理器: 工作正常 [{processors_str}] (TMDB: {tmdb_status}, Fanart: {fanart_status})"
+            )
+        elif not all_processors_ok:
+            logger.warning("[WARN] 部分媒体处理器初始化失败")
 
         # 消息队列和缓存
         self.message_queue: list[dict] = []
@@ -570,7 +591,9 @@ class MediaWebhookPlugin(Star):
 
         try:
             # 获取平台实例和bot客户端
-            platform = self.context.get_platform_inst(self.get_effective_platform_name())
+            platform = self.context.get_platform_inst(
+                self.get_effective_platform_name()
+            )
             if not platform:
                 raise Exception(f"未找到平台: {self.get_effective_platform_name()}")
 
@@ -585,11 +608,13 @@ class MediaWebhookPlugin(Star):
                 group_id=group_id,
                 messages=messages,
                 sender_id=self.sender_id,
-                sender_name=self.sender_name
+                sender_name=self.sender_name,
             )
 
             if result.get("success"):
-                logger.info(f"[OK] 合并转发发送成功 [适配器: {adapter.get_adapter_info()['name']}]")
+                logger.info(
+                    f"[OK] 合并转发发送成功 [适配器: {adapter.get_adapter_info()['name']}]"
+                )
             else:
                 raise Exception(result.get("error", "未知错误"))
 

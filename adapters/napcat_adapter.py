@@ -117,7 +117,7 @@ class NapCatAdapter(BaseAdapter):
             "data": {
                 "name": sender_name,
                 "uin": str(sender_id),  # go-cqhttp 标准使用字符串
-                "content": content
+                "content": content,
             },
         }
 
