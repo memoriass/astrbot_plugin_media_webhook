@@ -576,23 +576,20 @@ class MediaWebhookPlugin(Star):
 
             nodes_data = []
             for i, msg in enumerate(messages, 1):
-                # 构建节点内容
-                content = []
-
                 # 调试：打印消息数据结构
                 logger.debug(f"  消息 {i} 数据键: {list(msg.keys())}")
 
-                # 添加图片（如果有）- 使用 URL 格式
+                # 构建节点内容 - 使用CQ码字符串格式（LLOneBot兼容）
+                content_parts = []
+
+                # 添加图片（如果有）- 使用 CQ 码格式
                 image_url = msg.get("image_url")
                 if image_url:
                     logger.info(f"  消息 {i}: 添加图片")
                     logger.info(f"    图片URL: {image_url}")
                     logger.info(f"    URL类型: {'TMDB' if 'tmdb.org' in image_url else 'Fanart' if 'fanart.tv' in image_url else 'Emby/Jellyfin' if '/Items/' in image_url else '其他'}")
-                    # 直接使用 URL 格式，避免 base64 转换
-                    content.append({
-                        "type": "image",
-                        "data": {"file": image_url}
-                    })
+                    # 使用CQ码格式
+                    content_parts.append(f"[CQ:image,file={image_url}]")
                 else:
                     logger.warning(f"  消息 {i}: [WARN] 无图片URL")
                     # 检查media_data中是否有图片信息
@@ -606,21 +603,21 @@ class MediaWebhookPlugin(Star):
                 # 添加文本
                 message_text = msg["message_text"]
                 logger.info(f"  消息 {i}: 添加文本 (长度={len(message_text)})")
-                content.append({
-                    "type": "text",
-                    "data": {"text": message_text}
-                })
+                content_parts.append(message_text)
 
-                # 构建节点
+                # 合并为CQ码字符串
+                content_str = "".join(content_parts)
+
+                # 构建节点 - content使用字符串格式
                 node_data = {
                     "type": "node",
                     "data": {
-                        "user_id": str(self.sender_id),
-                        "nickname": self.sender_name,
-                        "content": content
+                        "name": self.sender_name,
+                        "uin": str(self.sender_id),
+                        "content": content_str
                     }
                 }
-                logger.info(f"  消息 {i}: 节点创建完成，包含 {len(content)} 个组件")
+                logger.info(f"  消息 {i}: 节点创建完成，content长度={len(content_str)}")
                 nodes_data.append(node_data)
 
             # 直接调用协议端 API，绕过 AstrBot 的消息组件转换
