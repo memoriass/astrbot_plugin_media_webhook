@@ -399,23 +399,23 @@ class MediaHandler:
         sentences = text.split("。")
         if len(sentences) > 1 and sentences[0]:
             first_sentence = sentences[0].strip() + "。"
-            # 限制长度
-            if len(first_sentence) > 100:
-                return first_sentence[:97] + "..."
+            # 限制长度（扩展到200字符）
+            if len(first_sentence) > 200:
+                return first_sentence[:197] + "..."
             return first_sentence
 
         # 按换行符分割
         lines = text.split("\n")
         first_line = lines[0].strip()
         if first_line:
-            # 限制长度
-            if len(first_line) > 100:
-                return first_line[:97] + "..."
+            # 限制长度（扩展到200字符）
+            if len(first_line) > 200:
+                return first_line[:197] + "..."
             return first_line
 
-        # 如果都没有，直接截取前100个字符
-        if len(text) > 100:
-            return text[:97] + "..."
+        # 如果都没有，直接截取前200个字符
+        if len(text) > 200:
+            return text[:197] + "..."
         return text.strip()
 
     def generate_main_section(self, data: dict) -> str:

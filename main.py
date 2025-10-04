@@ -563,79 +563,35 @@ class MediaWebhookPlugin(Star):
             self.last_batch_time = time.time()
 
     async def send_batch_messages(self, messages: list[dict]):
-        """发送合并转发消息（使用 AstrBot pipeline）"""
+        """发送合并转发消息（使用适配器）"""
         group_id = str(self.group_id).replace(":", "_")
 
-        logger.info(f"发送合并转发: {len(messages)} 条消息 [使用 LLOneBot 兼容模式]")
+        logger.info(f"发送合并转发: {len(messages)} 条消息")
 
         try:
-            # 使用自定义节点构建，避免 LLOneBot 的 base64 图片 bug
-            # LLOneBot 在处理合并转发中的 base64 图片时会报错：
-            # "Cannot read properties of undefined (reading 'result')"
-            # 解决方案：直接构建使用 URL 的节点字典，绕过 AstrBot 的 base64 转换
-
-            nodes_data = []
-            for i, msg in enumerate(messages, 1):
-                # 调试：打印消息数据结构
-                logger.debug(f"  消息 {i} 数据键: {list(msg.keys())}")
-
-                # 构建节点内容 - 使用CQ码字符串格式（LLOneBot兼容）
-                content_parts = []
-
-                # 添加图片（如果有）- 使用 CQ 码格式
-                image_url = msg.get("image_url")
-                if image_url:
-                    logger.info(f"  消息 {i}: 添加图片")
-                    logger.info(f"    图片URL: {image_url}")
-                    logger.info(f"    URL类型: {'TMDB' if 'tmdb.org' in image_url else 'Fanart' if 'fanart.tv' in image_url else 'Emby/Jellyfin' if '/Items/' in image_url else '其他'}")
-                    # 使用CQ码格式
-                    content_parts.append(f"[CQ:image,file={image_url}]")
-                else:
-                    logger.warning(f"  消息 {i}: [WARN] 无图片URL")
-                    # 检查media_data中是否有图片信息
-                    media_data = msg.get("media_data", {})
-                    if media_data:
-                        alt_image_url = media_data.get("image_url")
-                        logger.debug(f"    media_data中的image_url: {alt_image_url}")
-                        tmdb_enriched = media_data.get("tmdb_enriched", False)
-                        logger.debug(f"    TMDB丰富状态: {tmdb_enriched}")
-
-                # 添加文本
-                message_text = msg["message_text"]
-                logger.info(f"  消息 {i}: 添加文本 (长度={len(message_text)})")
-                content_parts.append(message_text)
-
-                # 合并为CQ码字符串
-                content_str = "".join(content_parts)
-
-                # 构建节点 - content使用字符串格式
-                node_data = {
-                    "type": "node",
-                    "data": {
-                        "name": self.sender_name,
-                        "uin": str(self.sender_id),
-                        "content": content_str
-                    }
-                }
-                logger.info(f"  消息 {i}: 节点创建完成，content长度={len(content_str)}")
-                nodes_data.append(node_data)
-
-            # 直接调用协议端 API，绕过 AstrBot 的消息组件转换
+            # 获取平台实例和bot客户端
             platform = self.context.get_platform_inst(self.get_effective_platform_name())
-            if platform:
-                bot = platform.get_client()
-                if bot is None:
-                    raise Exception("Bot 客户端未连接")
-
-                payload = {
-                    "group_id": int(group_id),
-                    "messages": nodes_data
-                }
-                logger.debug(f"发送合并转发 payload: {payload}")
-                await bot.call_action("send_group_forward_msg", **payload)
-                logger.info("[OK] 合并转发发送成功 [LLOneBot 兼容模式]")
-            else:
+            if not platform:
                 raise Exception(f"未找到平台: {self.get_effective_platform_name()}")
+
+            bot = platform.get_client()
+            if bot is None:
+                raise Exception("Bot 客户端未连接")
+
+            # 使用适配器发送消息
+            adapter = AdapterFactory.create_adapter(self.get_effective_platform_name())
+            result = await adapter.send_forward_messages(
+                bot_client=bot,
+                group_id=group_id,
+                messages=messages,
+                sender_id=self.sender_id,
+                sender_name=self.sender_name
+            )
+
+            if result.get("success"):
+                logger.info(f"[OK] 合并转发发送成功 [适配器: {adapter.get_adapter_info()['name']}]")
+            else:
+                raise Exception(result.get("error", "未知错误"))
 
         except Exception as e:
             logger.error(f"发送合并转发失败: {e}")

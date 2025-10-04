@@ -81,6 +81,11 @@ class NapCatAdapter(BaseAdapter):
         """
         构建 NapCat 格式的转发节点
 
+        根据 go-cqhttp 标准格式：
+        - 使用 name 和 uin 字段
+        - uin 为字符串类型
+        - content 为消息段数组
+
         Args:
             message: 消息内容
             sender_id: 发送者QQ号
@@ -105,10 +110,15 @@ class NapCatAdapter(BaseAdapter):
         if not content:
             content.append({"type": "text", "data": {"text": "[媒体通知]"}})
 
-        # 构建 NapCat 转发节点格式
+        # 构建 NapCat 转发节点格式（go-cqhttp 标准）
+        # 参考：https://docs.go-cqhttp.org/cqcode/#合并转发消息节点
         return {
             "type": "node",
-            "data": {"user_id": sender_id, "nickname": sender_name, "content": content},
+            "data": {
+                "name": sender_name,
+                "uin": str(sender_id),  # go-cqhttp 标准使用字符串
+                "content": content
+            },
         }
 
     def get_adapter_info(self) -> dict[str, Any]:
