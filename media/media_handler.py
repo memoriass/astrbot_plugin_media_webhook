@@ -1,7 +1,7 @@
 """
 媒体处理模块
 提供 Emby、Plex、Jellyfin 数据转换和标准化功能
-自动集成 TMDB 数据丰富功能
+自动集成多源数据丰富功能
 """
 
 import html
@@ -11,25 +11,20 @@ from typing import Optional
 from astrbot.api import logger
 
 from .processors import ProcessorManager
-from .tmdb_enricher import TMDBEnricher
+from .enrichment import EnrichmentManager
 
 
 class MediaHandler:
     """媒体处理器 - 处理 Emby、Plex、Jellyfin 等媒体服务器数据"""
 
-    def __init__(self, tmdb_api_key: str = "", fanart_api_key: str = ""):
+    def __init__(self, config: Optional[dict] = None):
         # 初始化处理器管理器
         self.processor_manager = ProcessorManager()
 
-        # 初始化 TMDB 丰富器
-        if tmdb_api_key:
-            self.tmdb_enricher = TMDBEnricher(tmdb_api_key, fanart_api_key)
-            self.tmdb_enabled = True
-            logger.info("媒体处理器: TMDB 丰富功能已启用")
-        else:
-            self.tmdb_enricher = None
-            self.tmdb_enabled = False
-            logger.info("媒体处理器: 未配置 TMDB API 密钥，跳过数据丰富")
+        # 初始化数据丰富管理器
+        self.enrichment_manager = EnrichmentManager(config)
+
+        logger.info("媒体处理器初始化完成")
 
     def detect_media_source(self, data: dict, headers: dict) -> str:
         """检测媒体通知来源"""
@@ -44,7 +39,7 @@ class MediaHandler:
     ) -> dict:
         """
         处理媒体数据的主入口
-        自动进行数据转换和 TMDB 丰富
+        自动进行数据转换和多源数据丰富
         """
         try:
             logger.info(f"开始处理 {source.title()} 媒体数据")
@@ -57,23 +52,23 @@ class MediaHandler:
                 logger.warning(f"{source.title()} 数据转换失败")
                 return self.create_fallback_payload(raw_data, source)
 
-            # 2. 自动进行 TMDB 数据丰富（如果启用）
-            if self.tmdb_enabled and self.tmdb_enricher:
-                logger.info("开始 TMDB 数据丰富")
-                logger.debug(f"  原始图片URL: {media_data.get('image_url', '无')}")
-                enriched_data = await self.tmdb_enricher.enrich_media_data(media_data)
-                if enriched_data.get("tmdb_enriched"):
-                    media_data = enriched_data
-                    logger.info("[OK] TMDB 数据丰富成功")
-                    logger.info(f"  丰富后图片URL: {media_data.get('image_url', '无')}")
-                else:
-                    logger.info("TMDB 数据丰富未找到匹配结果，使用原始数据")
-                    logger.info(f"  原始图片URL: {media_data.get('image_url', '无')}")
-            else:
-                logger.info("TMDB 未启用，使用原始媒体服务器数据")
-                logger.info(f"  原始图片URL: {media_data.get('image_url', '无')}")
+            # 2. 自动进行多源数据丰富
+            logger.info("开始数据丰富")
+            logger.debug(f"  原始图片URL: {media_data.get('image_url', '无')}")
+            enriched_data = await self.enrichment_manager.enrich_media_data(media_data)
 
-            # 3. 生成标准消息载荷
+            # 3. 获取图片（如果还没有图片）
+            if not enriched_data.get("image_url"):
+                logger.info("尝试获取图片")
+                image_url = await self.enrichment_manager.get_media_image(enriched_data)
+                if image_url:
+                    enriched_data["image_url"] = image_url
+                    logger.info(f"  获取到图片URL: {image_url}")
+
+            media_data = enriched_data
+            logger.info(f"  最终图片URL: {media_data.get('image_url', '无')}")
+
+            # 4. 生成标准消息载荷
             message_payload = self.create_message_payload(media_data, source)
 
             logger.info(f"{source.title()} 媒体数据处理完成")
@@ -126,7 +121,6 @@ class MediaHandler:
             message_text = self.generate_message_text_without_image_line(media_data)
 
             # 创建消息载荷
-            # 参考 ani-rss 模块的逻辑：图片和文本都包含在载荷中，由发送逻辑组合
             message_payload = {
                 "image_url": image_url,  # 始终包含图片URL（如果有）
                 "message_text": message_text,

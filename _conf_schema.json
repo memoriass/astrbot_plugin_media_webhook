@@ -11,6 +11,18 @@
     "hint": "HTTP服务器监听的端口号",
     "default": 60071
   },
+  "media_routes": {
+    "description": "媒体Webhook路由路径",
+    "type": "list",
+    "hint": "处理媒体相关推送的路由，格式为列表如 [\"/webhook\", \"/media-webhook\"]，或逗号分隔的字符串",
+    "default": ["/media-webhook"]
+  },
+  "game_routes": {
+    "description": "游戏Webhook路由路径",
+    "type": "list",
+    "hint": "处理游戏相关推送的路由，格式为列表如 [\"/game-webhook\"]，留空则禁用游戏路由",
+    "default": ["/game-webhook"]
+  },
   "cache_ttl_seconds": {
     "description": "重复请求缓存过期时间(秒)",
     "type": "int",
@@ -45,6 +57,24 @@
     "description": "Fanart.tv API Key",
     "type": "string",
     "hint": "用于获取高质量海报和背景图的 Fanart.tv API 密钥，作为 TMDB 图片的降级选项，留空则跳过 Fanart 查询",
+    "default": ""
+  },
+  "tvdb_api_key": {
+    "description": "TVDB API Key",
+    "type": "string",
+    "hint": "用于获取剧集详细信息的 TVDB API 密钥，作为 TMDB 的辅助数据源，留空则跳过 TVDB 查询",
+    "default": ""
+  },
+  "bgm_app_id": {
+    "description": "BGM.tv App ID",
+    "type": "string",
+    "hint": "用于获取动漫图片的 BGM.tv 应用 ID，留空则跳过 BGM.tv 图片查询",
+    "default": ""
+  },
+  "bgm_app_secret": {
+    "description": "BGM.tv App Secret",
+    "type": "string",
+    "hint": "用于获取动漫图片的 BGM.tv 应用密钥，留空则跳过 BGM.tv 图片查询",
     "default": ""
   },
   "sender_id": {

@@ -3,7 +3,6 @@
 提供模块化的媒体数据处理功能
 """
 
-from .ani_rss_handler import AniRSSHandler
 from .base_processor import BaseMediaProcessor
 from .emby_processor import EmbyProcessor
 from .generic_processor import GenericProcessor
@@ -18,5 +17,4 @@ __all__ = [
     "PlexProcessor",
     "GenericProcessor",
     "ProcessorManager",
-    "AniRSSHandler",
 ]
