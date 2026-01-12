@@ -7,6 +7,7 @@
 from .data_processor import MediaDataProcessor
 from .media_handler import MediaHandler
 from .enrichment import EnrichmentManager
+from .image_renderer import ImageRenderer
 from .processors import (
     BaseMediaProcessor,
     EmbyProcessor,

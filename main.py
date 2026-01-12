@@ -12,6 +12,7 @@ from astrbot.api.star import Context, Star, register
 
 from .adapters import AdapterFactory
 from .media import MediaHandler, MediaDataProcessor
+from .media.image_renderer import ImageRenderer
 from .game import GameHandler
 
 # 常量定义
@@ -73,6 +74,9 @@ class MediaWebhookPlugin(Star):
         logger.info(f"[DEBUG] media_routes: {self.media_routes}")
         logger.info(f"[DEBUG] game_routes: {self.game_routes}")
 
+        # 图片渲染配置 - 已强制启用，所有消息必须渲染成图片
+        logger.info("[OK] 图片渲染已强制启用 - 所有消息将被渲染成图片发送")
+
         # API 配置
         self.tmdb_api_key = config.get("tmdb_api_key", "")
         self.fanart_api_key = config.get("fanart_api_key", "")
@@ -94,6 +98,7 @@ class MediaWebhookPlugin(Star):
             self.media_handler = MediaHandler(enrichment_config)
             self.data_processor = MediaDataProcessor(self.media_handler, self.cache_ttl_seconds)
             self.game_handler = GameHandler(enrichment_config)
+            self.image_renderer = ImageRenderer()  # 初始化图片渲染器
         except Exception as e:
             logger.error(f"初始化处理器失败: {e}")
             raise
@@ -588,12 +593,40 @@ class MediaWebhookPlugin(Star):
             self.last_batch_time = time.time()
 
     async def send_batch_messages(self, messages: list[dict]):
-        """发送合并转发消息（使用适配器）"""
+        """发送合并转发消息（渲染为图片）"""
         group_id = str(self.group_id).replace(":", "_")
 
-        logger.info(f"发送合并转发: {len(messages)} 条消息")
+        logger.info(f"准备发送合并转发: {len(messages)} 条消息（已渲染为图片）")
 
         try:
+            # 先渲染所有消息为图片
+            rendered_messages = []
+            for i, msg in enumerate(messages, 1):
+                try:
+                    rendered_image = await self.image_renderer.render_simple_text_image(
+                        msg["message_text"], max_width=800
+                    )
+                    
+                    if rendered_image:
+                        # 创建渲染图片消息
+                        rendered_msg = {
+                            "message_text": f"[图片通知 {i}/{len(messages)}]",
+                            "image_url": None,
+                            "rendered_image": rendered_image,  # 图片字节数据
+                            "source": msg.get("source", "unknown"),
+                            "is_rendered": True,
+                        }
+                        rendered_messages.append(rendered_msg)
+                        logger.info(f"✓ 消息 {i} 渲染完成")
+                    else:
+                        logger.warning(f"✗ 消息 {i} 渲染失败，跳过")
+                except Exception as e:
+                    logger.error(f"渲染消息 {i} 失败: {e}")
+
+            if not rendered_messages:
+                logger.warning("没有成功渲染的消息")
+                return
+
             # 获取平台实例和bot客户端
             platform = self.context.get_platform_inst(
                 self.get_effective_platform_name()
@@ -605,19 +638,19 @@ class MediaWebhookPlugin(Star):
             if bot is None:
                 raise Exception("Bot 客户端未连接")
 
-            # 使用适配器发送消息
+            # 使用适配器发送渲染后的图片消息
             adapter = AdapterFactory.create_adapter(self.get_effective_platform_name())
             result = await adapter.send_forward_messages(
                 bot_client=bot,
                 group_id=group_id,
-                messages=messages,
+                messages=rendered_messages,
                 sender_id=self.sender_id,
                 sender_name=self.sender_name,
             )
 
             if result.get("success"):
                 logger.info(
-                    f"[OK] 合并转发发送成功 [适配器: {adapter.get_adapter_info()['name']}]"
+                    f"[OK] 合并转发发送成功 [适配器: {adapter.get_adapter_info()['name']}] ({len(rendered_messages)} 张图片)"
                 )
             else:
                 raise Exception(result.get("error", "未知错误"))
@@ -630,31 +663,32 @@ class MediaWebhookPlugin(Star):
             await self.send_individual_messages(messages)
 
     async def send_individual_messages(self, messages: list[dict]):
-        """发送单独消息"""
+        """发送单独消息（强制渲染为图片）"""
         group_id = str(self.group_id).replace(":", "_")
         unified_msg_origin = (
             f"{self.get_effective_platform_name()}:GroupMessage:{group_id}"
         )
 
-        logger.info(f"发送单独消息: {len(messages)} 条消息")
+        logger.info(f"发送单独消息: {len(messages)} 条消息（已渲染为图片）")
         logger.info(f"目标群组ID: {group_id}")
         logger.info(f"统一消息来源: {unified_msg_origin}")
 
         for i, msg in enumerate(messages, 1):
             try:
-                content_list = []
+                # 渲染文本为图片
+                rendered_image = await self.image_renderer.render_simple_text_image(
+                    msg["message_text"], max_width=800
+                )
+                
+                if not rendered_image:
+                    logger.warning(f"消息 {i} 渲染失败，跳过")
+                    continue
 
-                # 添加图片
-                if msg.get("image_url"):
-                    content_list.append(Comp.Image.fromURL(msg["image_url"]))
-
-                # 添加文本
-                content_list.append(Comp.Plain(msg["message_text"]))
-
-                # 创建消息链
+                # 创建消息链（仅包含渲染后的图片）
+                content_list = [Comp.Image.fromBytes(rendered_image)]
                 message_chain = MessageChain(content_list)
 
-                logger.info(f"准备发送消息 {i}: {msg.get('message_text', '')[:50]}...")
+                logger.info(f"准备发送渲染图片消息 {i}: {msg.get('message_text', '')[:30]}...")
                 await self.context.send_message(unified_msg_origin, message_chain)
                 logger.info(f"✅ 消息 {i}/{len(messages)} 发送成功")
 
