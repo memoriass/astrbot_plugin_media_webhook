@@ -9,25 +9,15 @@ from abc import ABC, abstractmethod
 from typing import Any, Optional
 
 from astrbot.api import logger
+from ..translator import MediaTranslator
+from ...utils.i18n import t
 
 
 class BaseMediaProcessor(ABC):
     """基础媒体处理器抽象类"""
 
     def __init__(self):
-        # 媒体类型映射
-        self.media_type_map = {
-            "Movie": "电影",
-            "Series": "剧集",
-            "Season": "剧季",
-            "Episode": "剧集",
-            "Album": "专辑",
-            "Song": "歌曲",
-            "Video": "视频",
-            "Audio": "音频",
-            "Book": "图书",
-            "AudioBook": "有声书",
-        }
+        pass
 
     @abstractmethod
     def can_handle(self, data: dict, headers: Optional[dict] = None) -> bool:
@@ -68,7 +58,7 @@ class BaseMediaProcessor(ABC):
                 # 1秒 = 10,000,000 ticks，1分钟 = 600,000,000 ticks
                 runtime_minutes = int(runtime_ticks // 600000000)
                 if runtime_minutes > 0:
-                    return f"{runtime_minutes}分钟"
+                    return f"{runtime_minutes} {t('minutes', '分钟')}"
             return ""
         except (TypeError, ValueError, ZeroDivisionError) as e:
             logger.debug(f"时长转换失败: {e}, runtime_ticks={runtime_ticks}")
@@ -76,7 +66,7 @@ class BaseMediaProcessor(ABC):
 
     def get_media_type_display(self, item_type: str) -> str:
         """获取媒体类型的显示名称"""
-        return self.media_type_map.get(item_type, item_type)
+        return t(item_type)
 
     def create_standard_data(self, **kwargs) -> dict:
         """创建标准格式的数据"""

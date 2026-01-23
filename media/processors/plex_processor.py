@@ -34,13 +34,20 @@ class PlexProcessor(BaseMediaProcessor):
         try:
             logger.debug(f"Plex 原始数据结构: {data}")
 
+            event = data.get("event", "")
+            # 只处理感兴趣的事件类型 (比如 library.new 或 playback 开始)
+            # 如果没有 event 字段，默认尝试处理 (为了兼容)
+            if event and event not in ["library.new", "media.play", "media.scrobble"]:
+                logger.debug(f"忽略不感兴趣的 Plex 事件: {event}")
+                return {}
+
             metadata = data.get("Metadata", {})
             if not metadata:
                 logger.warning("Plex数据中未找到Metadata字段")
                 return {}
 
             # 提取基本信息
-            item_type = metadata.get("type", "episode")
+            raw_type = metadata.get("type", "episode")
             # Plex类型映射
             plex_type_map = {
                 "movie": "Movie",
@@ -50,11 +57,11 @@ class PlexProcessor(BaseMediaProcessor):
                 "track": "Song",
                 "album": "Album",
             }
-            item_type = plex_type_map.get(item_type.lower(), item_type.title())
+            item_type = plex_type_map.get(raw_type.lower(), raw_type.title())
 
             item_name = metadata.get("title", "")
 
-            # 提取剧集信息
+            # 提取剧集/音乐信息
             series_name = ""
             season_number = ""
             episode_number = ""
@@ -68,6 +75,11 @@ class PlexProcessor(BaseMediaProcessor):
                 season_number = metadata.get("index", "")
             elif item_type == "Series":
                 series_name = item_name
+            elif item_type == "Song":
+                series_name = metadata.get("grandparentTitle", "") # Artist
+                item_name = f"{metadata.get('parentTitle', '')} - {item_name}" # Album - Song
+            elif item_type == "Album":
+                series_name = metadata.get("parentTitle", "") # Artist
 
             # 提取其他信息
             year = metadata.get("year", "")
@@ -77,26 +89,28 @@ class PlexProcessor(BaseMediaProcessor):
             runtime = ""
             duration = metadata.get("duration", 0)
             if duration and isinstance(duration, (int, float)) and duration > 0:
-                # Plex的duration是毫秒，转换为分钟
                 runtime_minutes = int(duration // 60000)
                 if runtime_minutes > 0:
                     runtime = f"{runtime_minutes}分钟"
 
             # 提取图片信息
             image_url = ""
-            thumb = metadata.get("thumb", "")
+            # 优先顺序: thumb -> art -> parentThumb -> grandparentThumb
+            thumb = metadata.get("thumb") or metadata.get("art") or metadata.get("parentThumb") or metadata.get("grandparentThumb")
+            
             if thumb:
                 # Plex的thumb通常是相对路径，需要拼接服务器地址
                 server_info = data.get("Server", {})
-                if server_info:
-                    server_url = server_info.get("url", "")
-                    if server_url and thumb.startswith("/"):
-                        server_url = server_url.rstrip("/")
-                        image_url = f"{server_url}{thumb}"
-                    elif not thumb.startswith("http"):
-                        # 如果没有服务器信息，尝试从其他字段获取
-                        image_url = thumb
+                server_url = server_info.get("url", "")
+                
+                # 如果有服务器地址且是以 / 调用的
+                if server_url and thumb.startswith("/"):
+                    server_url = server_url.rstrip("/")
+                    image_url = f"{server_url}{thumb}"
+                elif thumb.startswith("http"):
+                    image_url = thumb
                 else:
+                    # 如果没有服务器信息，留给后续的数据丰富管理器去 TMDB 找
                     image_url = thumb
 
             logger.debug(f"Plex 图片URL: {image_url}")
@@ -114,6 +128,10 @@ class PlexProcessor(BaseMediaProcessor):
                 source_data="plex",
             )
 
+            # 附加元数据
+            result["metadata"] = self.extract_plex_metadata(metadata)
+            result["plex_event"] = event
+            
             logger.debug(f"Plex 转换结果: {result}")
             return result
 

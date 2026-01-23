@@ -15,13 +15,35 @@
     "description": "媒体Webhook路由路径",
     "type": "list",
     "hint": "处理媒体相关推送的路由，格式为列表如 [\"/webhook\", \"/media-webhook\"]，或逗号分隔的字符串",
-    "default": ["/media-webhook"]
+    "default": [
+      "/media-webhook"
+    ]
   },
   "game_routes": {
     "description": "游戏Webhook路由路径",
     "type": "list",
     "hint": "处理游戏相关推送的路由，格式为列表如 [\"/game-webhook\"]，留空则禁用游戏路由",
-    "default": ["/game-webhook"]
+    "default": [
+      "/game-webhook"
+    ]
+  },
+  "common_routes": {
+    "description": "通用/扩展Webhook路由路径",
+    "type": "list",
+    "hint": "处理 GitHub, DockerHub 等普通消息推送，默认路径 /webhook",
+    "default": [
+      "/webhook"
+    ]
+  },
+  "language": {
+    "description": "显示语言",
+    "type": "string",
+    "enum": [
+      "zh",
+      "en"
+    ],
+    "default": "zh",
+    "hint": "输出消息和图片的语言 (zh/en)"
   },
   "cache_ttl_seconds": {
     "description": "重复请求缓存过期时间(秒)",
@@ -88,5 +110,66 @@
     "type": "string",
     "hint": "合并转发消息中显示的发送者昵称",
     "default": "媒体通知"
+  },
+  "game_ai_analyze": {
+    "description": "开启游戏Webhook AI分析",
+    "type": "bool",
+    "hint": "是否对游戏推送消息进行 AI 分析并展示分析结果",
+    "default": false
+  },
+  "game_ai_max_tokens": {
+    "description": "游戏AI分析最大字数",
+    "type": "int",
+    "hint": "AI 返回分析结果的最大字数限制",
+    "default": 150
+  },
+  "enable_translation": {
+    "description": "启用剧情自动翻译",
+    "type": "bool",
+    "hint": "当媒体剧作为非中文时，自动启用翻译",
+    "default": false
+  },
+  "preferred_translator": {
+    "description": "首选翻译引擎",
+    "type": "string",
+    "enum": [
+      "tencent",
+      "baidu",
+      "google"
+    ],
+    "hint": "选择首选翻译 API，若失败则自动按顺序降级",
+    "default": "tencent"
+  },
+  "tencent_secret_id": {
+    "description": "腾讯翻译 SecretId",
+    "type": "string",
+    "default": ""
+  },
+  "tencent_secret_key": {
+    "description": "腾讯翻译 SecretKey",
+    "type": "string",
+    "default": ""
+  },
+  "baidu_app_id": {
+    "description": "百度翻译 AppId",
+    "type": "string",
+    "default": ""
+  },
+  "baidu_secret_key": {
+    "description": "百度翻译 SecretKey",
+    "type": "string",
+    "default": ""
+  },
+  "cache_persistence_days": {
+    "description": "数据库缓存有效期(天)",
+    "type": "int",
+    "hint": "SQLite 数据库中元数据缓存的天数，默认为 7 天",
+    "default": 7
+  },
+  "webhook_token": {
+    "description": "Webhook 鉴权 Token",
+    "type": "string",
+    "hint": "如果设置，请求 header 必须包含 X-Webhook-Token 且匹配此值",
+    "default": ""
   }
 }

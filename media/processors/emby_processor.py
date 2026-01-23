@@ -33,15 +33,15 @@ class EmbyProcessor(BaseMediaProcessor):
         """将Emby数据转换为标准格式"""
         try:
             item = data.get("Item", {})
+            event = data.get("Event", "")
             logger.debug(f"Emby 原始数据结构: {data}")
-            logger.debug(f"Emby Item 数据: {item}")
+            logger.debug(f"Emby 事件类型: {event}")
 
             # 提取基本信息
             item_type = item.get("Type", "Unknown")
             item_name = item.get("Name", "")
-            logger.debug(f"Emby 提取的基本信息: type={item_type}, name={item_name}")
-
-            # 提取剧集信息
+            
+            # 提取剧集/音乐信息
             series_name = ""
             season_number = ""
             episode_number = ""
@@ -55,10 +55,19 @@ class EmbyProcessor(BaseMediaProcessor):
                 season_number = item.get("IndexNumber", "")
             elif item_type == "Series":
                 series_name = item_name
+            elif item_type == "Audio":
+                # 音乐处理
+                series_name = item.get("AlbumArtist", "") # 艺术家
+                album_name = item.get("Album", "")
+                if album_name:
+                    item_name = f"{album_name} - {item_name}"
             else:
                 # 对于电影等其他类型，使用item_name
                 pass
 
+            # 提取外部 ID (非常关键，用于后续数据富化)
+            provider_ids = item.get("ProviderIds", {})
+            
             # 提取其他信息
             year = item.get("ProductionYear", "")
             overview = self.clean_text(item.get("Overview", ""))
@@ -71,38 +80,20 @@ class EmbyProcessor(BaseMediaProcessor):
             server_url = server_info.get("Url", "")
             item_id = item.get("Id", "")
 
-            logger.debug(f"Emby 服务器信息: server_url={server_url}, item_id={item_id}")
-
-            # 方法1: 检查Emby webhook中的直接图片URL字段
-            # 某些Emby webhook配置会直接提供图片URL
+            # 优先使用直接提供的 URL
             direct_image_url = (
                 item.get("PrimaryImageUrl")
                 or item.get("ImageUrl")
                 or data.get("PrimaryImageUrl")
-                or data.get("ImageUrl")
             )
 
             if direct_image_url:
                 image_url = direct_image_url
-                logger.info(f"Emby 使用直接提供的图片URL: {image_url[:80]}...")
-
-            # 方法2: 检查ImageTags并构建URL
-            elif item.get("ImageTags", {}).get("Primary"):
-                if server_url and item_id:
-                    # 确保服务器URL不以/结尾
-                    server_url = server_url.rstrip("/")
-                    image_url = f"{server_url}/Items/{item_id}/Images/Primary"
-                    logger.info(f"Emby 通过ImageTags构建图片URL: {image_url}")
-
-            # 方法3: 如果ImageTags不存在，尝试直接构建URL（Emby总是有Primary图片）
             elif server_url and item_id:
+                # 如果没有直接 URL，构建拼接 URL
+                # 注意：某些 Emby 需要 api_key 才能访问图片，这里仅构建基础，富化流程会尝试补充
                 server_url = server_url.rstrip("/")
                 image_url = f"{server_url}/Items/{item_id}/Images/Primary"
-                logger.info(f"Emby ImageTags为空，尝试直接构建图片URL: {image_url}")
-            else:
-                logger.warning(
-                    f"Emby 图片URL构建失败：server_url={server_url}, item_id={item_id}"
-                )
 
             result = self.create_standard_data(
                 item_type=item_type,
@@ -116,6 +107,16 @@ class EmbyProcessor(BaseMediaProcessor):
                 image_url=image_url,
                 source_data="emby",
             )
+
+            # 附加元数据与外部 ID
+            result["metadata"] = self.extract_emby_metadata(item)
+            result["provider_ids"] = provider_ids
+            result["emby_event"] = event
+            
+            # 如果是播放事件，可以附带用户信息
+            user = data.get("User", {})
+            if user and "Name" in user:
+                result["trigger_user"] = user["Name"]
 
             logger.debug(f"Emby 转换结果: {result}")
             return result

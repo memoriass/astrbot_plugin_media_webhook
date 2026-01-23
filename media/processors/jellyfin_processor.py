@@ -15,10 +15,16 @@ class JellyfinProcessor(BaseMediaProcessor):
 
     def can_handle(self, data: dict, headers: Optional[dict] = None) -> bool:
         """检查是否为Jellyfin数据"""
-        # Jellyfin特征：包含ItemType或SeriesName字段
-        if "ItemType" in data or "SeriesName" in data:
+        # Jellyfin特征：包含ItemType或SeriesName字段，或者包含NotificationType
+        if any(k in data for k in ["ItemType", "SeriesName", "NotificationType", "ItemId"]):
             logger.debug("检测到Jellyfin数据结构特征")
             return True
+
+        # 检查嵌套结构
+        if "Item" in data and isinstance(data["Item"], dict):
+            item = data["Item"]
+            if any(k in item for k in ["ItemType", "SeriesName", "ItemId"]):
+                return True
 
         # 检查User-Agent
         if headers:
@@ -34,39 +40,46 @@ class JellyfinProcessor(BaseMediaProcessor):
         try:
             logger.debug(f"Jellyfin 原始数据结构: {data}")
 
+            # 处理可能的包装结构 (Notification plugin)
+            payload = data
+            if "Item" in data and isinstance(data["Item"], dict):
+                # 如果有 Item 字段，认为它是包装后的数据
+                payload = data["Item"]
+                # 将顶层的服务器信息合并进来
+                for key in ["ServerId", "ServerName", "ServerUrl"]:
+                    if key in data and key not in payload:
+                        payload[key] = data[key]
+
             # 提取基本信息
-            item_type = data.get("ItemType", data.get("Type", "Episode"))
-            item_name = data.get("Name", "")
+            item_type = payload.get("ItemType", payload.get("Type", "Episode"))
+            item_name = payload.get("Name", "")
 
             # 提取剧集信息
-            series_name = data.get("SeriesName", "")
-            season_number = data.get("SeasonNumber", data.get("ParentIndexNumber", ""))
-            episode_number = data.get("EpisodeNumber", data.get("IndexNumber", ""))
+            series_name = payload.get("SeriesName", "")
+            season_number = payload.get("SeasonNumber", payload.get("ParentIndexNumber", ""))
+            episode_number = payload.get("EpisodeNumber", payload.get("IndexNumber", ""))
 
             # 如果是剧集类型但没有剧集名，使用Name作为剧集名
             if item_type in ["Series", "Season"] and not series_name:
                 series_name = item_name
 
             # 提取其他信息
-            year = data.get("Year", data.get("ProductionYear", ""))
-            overview = self.clean_text(data.get("Overview", ""))
+            year = payload.get("Year", payload.get("ProductionYear", ""))
+            overview = self.clean_text(payload.get("Overview", ""))
 
             # 处理时长
-            runtime = ""
-            runtime_ticks = data.get("RunTimeTicks", 0)
+            runtime_ticks = payload.get("RunTimeTicks", 0)
             runtime = self.safe_get_runtime(runtime_ticks)
 
             # 提取图片信息
             image_url = ""
-            # Jellyfin可能直接提供图片URL
-            if data.get("ImageUrl"):
-                image_url = data.get("ImageUrl")
-            elif data.get("PrimaryImageUrl"):
-                image_url = data.get("PrimaryImageUrl")
-            elif data.get("ServerId") and data.get("ItemId"):
-                # 构建Jellyfin图片URL
-                item_id = data.get("ItemId")
-                server_url = data.get("ServerUrl", "")
+            if payload.get("ImageUrl"):
+                image_url = payload.get("ImageUrl")
+            elif payload.get("PrimaryImageUrl"):
+                image_url = payload.get("PrimaryImageUrl")
+            elif payload.get("ItemId"):
+                item_id = payload.get("ItemId")
+                server_url = payload.get("ServerUrl", data.get("ServerUrl", ""))
                 if server_url:
                     server_url = server_url.rstrip("/")
                     image_url = f"{server_url}/Items/{item_id}/Images/Primary"
@@ -86,6 +99,9 @@ class JellyfinProcessor(BaseMediaProcessor):
                 source_data="jellyfin",
             )
 
+            # 附加元数据
+            result["metadata"] = self.extract_jellyfin_metadata(payload)
+            
             logger.debug(f"Jellyfin 转换结果: {result}")
             return result
 

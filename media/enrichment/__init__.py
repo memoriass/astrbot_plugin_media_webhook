@@ -7,7 +7,7 @@ from .base_provider import MediaEnrichmentProvider, MediaImageProvider
 from .enrichment_manager import EnrichmentManager, MediaEnrichmentManager
 from .tmdb_provider import TMDBProvider
 from .tvdb_provider import TVDBProvider
-from .bgm_provider import BGMTVImageProvider
+from .bgm_provider import BGMProvider
 
 __all__ = [
     "MediaEnrichmentProvider",
@@ -16,5 +16,5 @@ __all__ = [
     "MediaEnrichmentManager",
     "TMDBProvider",
     "TVDBProvider",
-    "BGMTVImageProvider",
+    "BGMProvider",
 ]

@@ -24,6 +24,7 @@ class MediaHandler:
         # 初始化数据丰富管理器
         self.enrichment_manager = EnrichmentManager(config)
 
+
         logger.info("媒体处理器初始化完成")
 
     def detect_media_source(self, data: dict, headers: dict) -> str:
@@ -57,7 +58,8 @@ class MediaHandler:
             logger.debug(f"  原始图片URL: {media_data.get('image_url', '无')}")
             enriched_data = await self.enrichment_manager.enrich_media_data(media_data)
 
-            # 3. 获取图片（如果还没有图片）
+
+            # 4. 获取图片（如果还没有图片）
             if not enriched_data.get("image_url"):
                 logger.info("尝试获取图片")
                 image_url = await self.enrichment_manager.get_media_image(enriched_data)
@@ -102,13 +104,8 @@ class MediaHandler:
     def get_processing_stats(self) -> dict:
         """获取处理统计信息"""
         stats = {
-            "tmdb_enabled": self.tmdb_enabled,
             "processor_info": self.processor_manager.get_processor_info(),
         }
-
-        if self.tmdb_enricher:
-            stats["tmdb_cache_stats"] = self.tmdb_enricher.get_cache_stats()
-
         return stats
 
     def create_message_payload(self, media_data: dict, source: str) -> dict:
@@ -208,18 +205,13 @@ class MediaHandler:
             # 时长信息
             runtime = data.get("runtime", "")
             if runtime:
-                if item_type == "Movie":
-                    message_parts.append(f"片长: {runtime}")
-                elif item_type in ["Episode", "Video"] or item_type == "Song":
-                    message_parts.append(f"时长: {runtime}")
-                else:
-                    message_parts.append(f"时长: {runtime}")
+                message_parts.append(f"时长: {runtime}")
 
             # 数据来源标记
             if data.get("tmdb_enriched"):
-                message_parts.append("[*] 数据来源: TMDB")
+                message_parts.append(f"[*] 数据来源: TMDB")
             elif data.get("bgm_enriched"):
-                message_parts.append("[*] 数据来源: BGM.TV")
+                message_parts.append(f"[*] 数据来源: BGM.TV")
 
             return "\n".join(message_parts)
 
@@ -427,16 +419,16 @@ class MediaHandler:
             # 电影信息
             if item_name:
                 year_text = f" ({year})" if year else ""
-                sections.append(f"电影名称: {item_name}{year_text}")
+                sections.append(f"名称: {item_name}{year_text}")
             elif series_name:
                 year_text = f" ({year})" if year else ""
-                sections.append(f"电影名称: {series_name}{year_text}")
+                sections.append(f"名称: {series_name}{year_text}")
 
         elif item_type in ["Series", "Season"]:
             # 剧集/剧季信息
             if series_name:
                 year_text = f" ({year})" if year else ""
-                sections.append(f"剧集名称: {series_name}{year_text}")
+                sections.append(f"名称: {series_name}{year_text}")
             if item_type == "Season" and season_number:
                 sections.append(f"季号: 第{season_number}季")
             if item_name and item_name != series_name:

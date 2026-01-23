@@ -85,12 +85,27 @@ class MediaDataProcessor:
             body_text = raw_msg.get("raw_data", "")
             headers = raw_msg.get("headers", {})
 
+            # 处理 Plex 的 multipart/form-data 特殊情况
+            if "multipart/form-data" in headers.get("Content-Type", "").lower() or "plex" in headers.get("User-Agent", "").lower():
+                # Plex 默认将 JSON 放在 form-data 的 'payload' 字段中
+                # 简单检测方法：如果 body_text 看起来像 multipart (包含 boundary)
+                if "name=\"payload\"" in body_text:
+                    try:
+                        # 尝试正则匹配提取 payload 部分
+                        import re
+                        match = re.search(r'name="payload"\r\n\r\n(\{.*?\})\r\n', body_text, re.DOTALL)
+                        if match:
+                            body_text = match.group(1)
+                            logger.info("成功从 Plex Multipart 载荷中提取 JSON")
+                    except Exception as e:
+                        logger.warning(f"从 Plex Multipart 提取数据失败: {e}")
+
             # 处理标准媒体数据
             try:
                 raw_data = json.loads(body_text)
-                logger.info("检测为标准媒体数据")
+                logger.debug(f"成功解析 Webhook JSON 数据: {str(raw_data)[:200]}...")
             except json.JSONDecodeError as e:
-                logger.error(f"JSON 解析失败: {e}")
+                logger.error(f"JSON 解析失败: {e}, 原始数据预览: {body_text[:200]}")
                 return None
 
             # 检测媒体来源

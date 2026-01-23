@@ -3,15 +3,16 @@
 统一管理各种媒体数据和图片提供者，提供统一的接口
 """
 
+import os
 from typing import Dict, List, Optional
 
 from astrbot.api import logger
 
-from .base_provider import MediaEnrichmentProvider, MediaImageProvider
+from .base_provider import MediaEnrichmentProvider, MediaImageProvider, BaseProvider
 from .tmdb_provider import TMDBProvider
 from .tvdb_provider import TVDBProvider
-from .bgm_provider import BGMTVImageProvider
-
+from .bgm_provider import BGMProvider
+from ..cache_manager import CacheManager
 
 class EnrichmentManager:
     """媒体数据丰富管理器"""
@@ -21,8 +22,23 @@ class EnrichmentManager:
         self.enrichment_providers: List[MediaEnrichmentProvider] = []
         self.image_providers: List[MediaImageProvider] = []
 
+        # 初始化持久化缓存
+        # 优先从配置获取数据路径
+        db_dir = self.config.get("data_path")
+        if not db_dir:
+            # Fallback (old logic, ideally not hit)
+            root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            db_dir = os.path.join(root_dir, "data")
+        
+        persistence_days = self.config.get("cache_persistence_days", 7)
+        self.cache = CacheManager(db_dir, persistence_days)
+        # 启动时简单清理一次
+        self.cache.cleanup()
+
         # 初始化提供者
         self._initialize_providers()
+
+        logger.info("数据丰富管理器初始化完成")
 
     def _initialize_providers(self):
         """初始化所有提供者"""
@@ -42,13 +58,14 @@ class EnrichmentManager:
             self.enrichment_providers.append(tvdb_provider)
             logger.info("TVDB 提供者已启用")
 
-        # BGM.tv 图片提供者
+        # BGM.tv 提供者 (同时支持丰富和图片)
         bgm_app_id = self.config.get("bgm_app_id", "")
         bgm_app_secret = self.config.get("bgm_app_secret", "")
-        if bgm_app_id and bgm_app_secret:
-            bgm_provider = BGMTVImageProvider(bgm_app_id, bgm_app_secret)
-            self.image_providers.append(bgm_provider)
-            logger.info("BGM.tv 图片提供者已启用")
+        # BGM 不需要 API Key 也可以进行基础搜索，但有 ID 更好
+        bgm_provider = BGMProvider(self.config)
+        self.enrichment_providers.append(bgm_provider)
+        self.image_providers.append(bgm_provider)
+        logger.info("BGM.tv 提供者已启用")
 
         # 按优先级排序
         self.enrichment_providers.sort(key=lambda p: p.priority)
@@ -62,11 +79,21 @@ class EnrichmentManager:
     async def enrich_media_data(self, media_data: dict) -> dict:
         """
         使用所有可用的提供者丰富媒体数据
-
-        按优先级尝试每个提供者，直到有一个成功丰富数据
         """
         try:
+            # 1. 尝试从持久化缓存获取
+            cache_key = self._generate_cache_key(media_data)
+            cached_data = self.cache.get(cache_key)
+            if cached_data:
+                logger.info(f"使用持久化缓存数据: {media_data.get('item_name')}")
+                # 合并缓存数据，但保留原始来源信息
+                media_data.update(cached_data)
+                media_data["enriched_from_cache"] = True
+                return media_data
+
+            # 2. 按优先级尝试各 Provider
             enriched_data = media_data.copy()
+            enriched = False
 
             for provider in self.enrichment_providers:
                 try:
@@ -77,23 +104,53 @@ class EnrichmentManager:
                     if result != enriched_data:
                         logger.info(f"{provider.name} 数据丰富成功")
                         enriched_data = result
+                        enriched = True
                         break  # 成功后停止尝试其他提供者
 
                 except Exception as e:
                     logger.error(f"{provider.name} 数据丰富失败: {e}")
                     continue
 
+            # 3. 如果丰富成功，存入缓存
+            if enriched:
+                # 只缓存关键的丰富字段，不缓存 image_url（因为可能过快失效或需要动态构建）
+                cache_data = {
+                    "overview": enriched_data.get("overview"),
+                    "tmdb_id": enriched_data.get("tmdb_id"),
+                    "bgm_id": enriched_data.get("bgm_id"),
+                    "tmdb_enriched": enriched_data.get("tmdb_enriched"),
+                    "bgm_enriched": enriched_data.get("bgm_enriched"),
+                    "year": enriched_data.get("year"),
+                }
+                self.cache.set(cache_key, cache_data)
+
             return enriched_data
 
         except Exception as e:
             logger.error(f"媒体数据丰富出错: {e}")
-            return media_data
+        return media_data
+
+    def _generate_cache_key(self, media_data: dict) -> str:
+        """根据媒体信息生成唯一的缓存 Key"""
+        item_name = media_data.get("item_name", "")
+        item_type = media_data.get("item_type", "")
+        year = media_data.get("year", "")
+        # 如果有 ProviderIds (来自 Emby/Plex)，优先使用 ID 作为 Key
+        p_ids = media_data.get("provider_ids", {})
+        if p_ids:
+            for platform in ["TMDB", "IMDB", "TVDB"]:
+                id_val = p_ids.get(platform) or p_ids.get(platform.capitalize()) or p_ids.get(platform.lower())
+                if id_val:
+                    return f"{platform}_{id_val}"
+        
+        # 兜底：使用 名称+类型+年份 的组合哈希
+        key_str = f"{item_name}_{item_type}_{year}".lower().strip()
+        import hashlib
+        return hashlib.md5(key_str.encode()).hexdigest()
 
     async def get_media_image(self, media_data: dict) -> str:
         """
         获取媒体图片
-
-        按优先级尝试每个图片提供者，直到获取到图片
         """
         try:
             for provider in self.image_providers:
@@ -109,7 +166,6 @@ class EnrichmentManager:
                     logger.error(f"{provider.name} 图片获取失败: {e}")
                     continue
 
-            logger.info("所有图片提供者都未获取到图片")
             return ""
 
         except Exception as e:
@@ -128,29 +184,6 @@ class EnrichmentManager:
                 for p in self.image_providers
             ]
         }
-
-    def add_enrichment_provider(self, provider: MediaEnrichmentProvider):
-        """添加数据丰富提供者"""
-        self.enrichment_providers.append(provider)
-        self.enrichment_providers.sort(key=lambda p: p.priority)
-        logger.info(f"添加数据丰富提供者: {provider.name}")
-
-    def add_image_provider(self, provider: MediaImageProvider):
-        """添加图片提供者"""
-        self.image_providers.append(provider)
-        self.image_providers.sort(key=lambda p: p.priority)
-        logger.info(f"添加图片提供者: {provider.name}")
-
-    def remove_enrichment_provider(self, name: str):
-        """移除数据丰富提供者"""
-        self.enrichment_providers = [p for p in self.enrichment_providers if p.name != name]
-        logger.info(f"移除数据丰富提供者: {name}")
-
-    def remove_image_provider(self, name: str):
-        """移除图片提供者"""
-        self.image_providers = [p for p in self.image_providers if p.name != name]
-        logger.info(f"移除图片提供者: {name}")
-
 
 # 向后兼容的别名
 MediaEnrichmentManager = EnrichmentManager
