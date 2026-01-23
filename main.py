@@ -35,7 +35,7 @@ DEFAULT_BATCH_INTERVAL = 300
     "memoriass",
     "通用 Webhook 推送插件，支持媒体、游戏及自定义消息推送",
     "1.3.0",
-    "https://github.com/memoriass/astrbot_plugin_media_webhook",
+    "https://github.com/memoriass/astrbot_plugin_webhook_push",
 )
 class WebhookPushPlugin(Star):
     """通用 Webhook 推送插件"""
