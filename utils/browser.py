@@ -85,6 +85,7 @@ async def render_template(
     context: dict,
     viewport: dict = None,
     selector: str = "body",
+    device_scale_factor: float = 1.5,  # 降低默认缩放比例以减小图片体积
 ) -> bytes:
     """渲染模板并截图"""
     if viewport is None:
@@ -98,10 +99,16 @@ async def render_template(
     template = env.get_template(template_name)
     html_content = await template.render_async(**context)
 
-    async with PageContext(viewport=viewport, device_scale_factor=2) as page:
-        logger.debug("开始渲染页面内容...")
+    async with PageContext(viewport=viewport, device_scale_factor=device_scale_factor) as page:
+        logger.info(f"[{template_name}] 开始渲染页面内容 (HTML大小: {len(html_content)/1024:.2f} KB)...")
         # 使用 load 确保基本资源已加载，避免 Docker 环境下 networkidle 超时
-        await page.set_content(html_content, wait_until="load", timeout=60000)
+        try:
+            await page.set_content(html_content, wait_until="load", timeout=60000)
+            logger.info(f"[{template_name}] 页面内容加载完成")
+        except Exception as e:
+            logger.error(f"[{template_name}] 页面 set_content 失败/超时: {e}")
+            raise
+
         try:
             # 额外等待一小段时间以防万一
             await page.wait_for_timeout(1000)
@@ -109,8 +116,10 @@ async def render_template(
             logger.warning(f"页面渲染等待失败: {e}")
 
         if selector == "body":
-            logger.debug("正在对整个页面进行截图...")
-            return await page.screenshot(type="png", full_page=True)
+            logger.info("正在对整个页面进行截图...")
+            screenshot = await page.screenshot(type="png", full_page=True)
+            logger.info("截图完成")
+            return screenshot
 
         try:
             logger.debug(f"等待选择器 {selector} 可见...")
@@ -120,10 +129,10 @@ async def render_template(
             except Exception as e:
                 logger.warning(f"选择器 {selector} 等待超时: {e}")
 
-            logger.debug(f"正在对选择器 {selector} 进行截图...")
+            logger.info(f"正在对选择器 {selector} 进行截图...")
             locator = page.locator(selector)
             img = await locator.screenshot(type="png")
-            logger.debug("截图完成，返回图片数据。")
+            logger.info("截图完成，返回图片数据。")
             return img
         except Exception as e:
             logger.warning(f"选择器 {selector} 截图失败: {e}. 回退到全屏截图。")

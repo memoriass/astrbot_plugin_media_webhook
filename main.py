@@ -79,6 +79,11 @@ class Main(Star):
             / "astrbot_plugin_webhook_push"
         )
         base_data_path.mkdir(parents=True, exist_ok=True)
+        
+        # 自动创建用户可自定义的资源目录
+        (base_data_path / "media_bg").mkdir(exist_ok=True)
+        (base_data_path / "game_bg").mkdir(exist_ok=True)
+        (base_data_path / "common_bg").mkdir(exist_ok=True)
 
         enrichment_config = {
             "tmdb_api_key": config.get("tmdb_api_key", ""),
@@ -101,7 +106,7 @@ class Main(Star):
             )
             self.game_handler = GameHandler(self.context, config)
             self.common_handler = CommonHandler(config)
-            self.image_renderer = HtmlRenderer()
+            self.image_renderer = HtmlRenderer(base_data_path)
         except Exception as e:
             logger.error(f"初始化处理器失败: {e}")
             raise
@@ -386,32 +391,55 @@ class Main(Star):
                 if img:
                     # 将图片转换为 base64:// 协议字符串，适配 OneBot 协议
                     base64_str = f"base64://{base64.b64encode(img).decode()}"
+                    logger.info(f"[{trace_id}] 图片转 Base64 成功，长度: {len(base64_str)}")
                     rendered_messages.append(
                         {
-                            "message_text": "[图片通知]",
+                            "message_text": "",  # 留空，只发送图片
                             "image_url": base64_str,  # 适配器期望的字段名是 image_url
                             "sender_name": self.sender_name,
                         }
                     )
 
             if not rendered_messages:
+                logger.warning("没有可发送的渲染消息")
                 return
 
-            platform = self.context.get_platform_inst(
-                self.get_effective_platform_name()
-            )
-            bot = platform.get_client() if platform else None
+            effective_platform = self.get_effective_platform_name()
+            logger.info(f"配置/推断的协议适配器类型: {effective_platform}")
+
+            # 1. 尝试直接获取平台实例 (Transport Layer)
+            platform_inst = self.context.get_platform_inst(effective_platform)
+            
+            # 2. 如果失败，尝试获取 'aiocqhttp' (这是大多数 OneBot 实现的通用 AstrBot 平台名)
+            if not platform_inst and effective_platform in ["llonebot", "napcat"]:
+                logger.info(f"未找到名为 {effective_platform} 的平台实例，尝试使用 'aiocqhttp' 作为传输层...")
+                platform_inst = self.context.get_platform_inst("aiocqhttp")
+
+            # 3. 如果还是失败，尝试使用第一个可用平台
+            if not platform_inst:
+                insts = self.context.platform_manager.platform_insts
+                if insts:
+                    fallback_id = insts[0].meta().id
+                    logger.warning(f"指定/推断的平台 {effective_platform} 未加载，回退到第一个可用平台: {fallback_id}")
+                    platform_inst = insts[0]
+
+            bot = platform_inst.get_client() if platform_inst else None
             if not bot:
+                logger.error(f"无法获取任何可用的 Bot 实例，取消发送")
                 return
 
-            adapter = AdapterFactory.create_adapter(self.get_effective_platform_name())
-            await adapter.send_forward_messages(
+            logger.info("正在创建适配器...")
+            adapter = AdapterFactory.create_adapter(effective_platform)
+            logger.info(f"适配器 {type(adapter).__name__} 创建成功，开始发送...")
+            
+            result = await adapter.send_forward_messages(
                 bot_client=bot,
                 group_id=str(self.group_id).replace(":", "_"),
                 messages=rendered_messages,
                 sender_id=self.sender_id,
                 sender_name=self.sender_name,
             )
+            logger.info(f"发送结果: {result}")
         except Exception as e:
             logger.error(f"批量发送失败，回退到单独发送: {e}")
             await self.send_individual_messages(messages)

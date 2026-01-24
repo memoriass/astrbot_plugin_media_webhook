@@ -56,13 +56,24 @@ class MediaHandler:
             logger.debug(f"  原始图片URL: {media_data.get('image_url', '无')}")
             enriched_data = await self.enrichment_manager.enrich_media_data(media_data)
 
-            # 4. 获取图片（如果还没有图片）
-            if not enriched_data.get("image_url"):
-                logger.info("尝试获取图片")
-                image_url = await self.enrichment_manager.get_media_image(enriched_data)
-                if image_url:
-                    enriched_data["image_url"] = image_url
-                    logger.info(f"  获取到图片URL: {image_url}")
+            # 保存原始提供的图片 URL (自定义图片) 作为兜底
+            custom_image_url = media_data.get("image_url", "")
+
+
+
+            # 3. 获取图片逻辑：丰富器优先 > 自定义兜底
+            logger.info("尝试获取丰富器图片")
+            # 总是尝试从丰富器获取图片 (Media Route Prioritize Enricher)
+            enricher_image_url = await self.enrichment_manager.get_media_image(enriched_data)
+            
+            if enricher_image_url:
+                enriched_data["image_url"] = enricher_image_url
+                logger.info(f"  优先使用丰富器提供的图片: {enricher_image_url}")
+            elif custom_image_url:
+                enriched_data["image_url"] = custom_image_url
+                logger.info(f"  丰富器未提供图片，回退使用自定义图片: {custom_image_url}")
+            else:
+                logger.info("  无可用图片")
 
             media_data = enriched_data
             logger.info(f"  最终图片URL: {media_data.get('image_url', '无')}")

@@ -94,14 +94,17 @@ class LLOneBotAdapter(BaseAdapter):
         content = []
 
         # 添加图片（如果有）
+        # 添加图片（如果有）
         if message.get("image_url"):
-            # 为 LLOneBot 也添加 summary 参数，以触发潜在的图片处理逻辑
-            content.append(
-                {
-                    "type": "image",
-                    "data": {"file": message["image_url"], "summary": "AstrBot_Compressed"},
-                }
-            )
+            # 标准 OneBot v11 格式
+            img_node = {
+                "type": "image",
+                "data": {"file": message["image_url"]},
+            }
+            content.append(img_node)
+            # LOG DEBUG: 打印图片节点概要（不打印完整的 Base64）
+            # from astrbot.api import logger
+            # logger.info(f"添加图片节点: file_len={len(message['image_url'])}")
 
         # 添加文本
         message_text = str(message.get("message_text", "")).strip()

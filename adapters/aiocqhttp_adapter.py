@@ -22,16 +22,7 @@ class AiocqhttpAdapter(BaseAdapter):
         self, bot_client: Any, group_id: str, messages: list[dict[str, Any]], **kwargs
     ) -> dict[str, Any]:
         """
-        使用 AstrBot 原生 Node/Nodes 组件发送合并转发消息
-
-        Args:
-            bot_client: aiocqhttp 客户端实例
-            group_id: 群组ID
-            messages: 消息列表
-            **kwargs: 其他参数，支持 user_id (私聊), sender_id, sender_name
-
-        Returns:
-            dict: 发送结果，包含成功状态和消息验证信息
+        发送合并转发消息 (直接调用 API 避免组件序列化问题)
         """
         try:
             # 获取配置参数
@@ -39,51 +30,59 @@ class AiocqhttpAdapter(BaseAdapter):
             sender_id = kwargs.get("sender_id", "10000")
             sender_name = kwargs.get("sender_name", "媒体服务器")
 
-            # 构建 AstrBot 原生 Node 组件列表
-            nodes = []
+            # 构建原生字典格式的 Nodes
+            # 避开 AstrBot Comp.Node 可能存在的序列化干扰 (如将图片转为 CQ 码)
+            forward_nodes = []
 
-            for _i, msg in enumerate(messages):
-                # 构建消息内容
-                content = []
+            for msg in messages:
+                # 节点内容 (Message Segments)
+                node_content = []
 
-                # 添加文本内容
-                if msg.get("text"):
-                    content.append(Comp.Plain(text=msg["text"]))
+                # 1. 文本片段
+                text = msg.get("text") or msg.get("message_text")
+                if text:
+                    node_content.append({"type": "text", "data": {"text": str(text)}})
 
-                # 添加图片内容
+                # 2. 图片片段
                 if msg.get("image_url"):
-                    try:
-                        content.append(Comp.Image.fromURL(url=msg["image_url"]))
-                    except Exception as e:
-                        # 如果图片加载失败，添加错误提示
-                        content.append(Comp.Plain(text=f"[图片加载失败: {str(e)}]"))
+                    node_content.append({
+                        "type": "image",
+                        "data": {
+                            "file": msg["image_url"]
+                        }
+                    })
 
-                # 如果没有内容，添加默认文本
-                if not content:
-                    content.append(Comp.Plain(text="[空消息]"))
+                # 3. 兜底
+                if not node_content:
+                    node_content.append({"type": "text", "data": {"text": "[空消息]"}})
 
-                # 创建 Node 组件
-                node = Comp.Node(uin=int(sender_id), name=sender_name, content=content)
-                nodes.append(node)
+                # 包装为 Node
+                forward_nodes.append({
+                    "type": "node",
+                    "data": {
+                        "name": sender_name,
+                        "uin": int(sender_id), # 确保是整数
+                        "content": node_content
+                    }
+                })
 
-            # 构建消息链
-            if len(nodes) == 1:
-                # 单个节点直接发送
-                message_chain = MessageChain().chain(nodes[0].content)
-            else:
-                # 多个节点使用 Nodes 组件
-                message_chain = MessageChain().chain([Comp.Nodes(nodes=nodes)])
+            if not forward_nodes:
+                return {"success": False, "error": "消息构建后为空"}
 
-            # 发送消息
+            # 直接调用 OneBot v11 API
             if user_id:
-                # 私聊消息
-                result = await self._send_private_message(
-                    bot_client, user_id, message_chain
+                # 私聊合并转发
+                result = await bot_client.api.call_action(
+                    "send_private_forward_msg",
+                    user_id=int(user_id),
+                    messages=forward_nodes
                 )
             else:
-                # 群聊消息
-                result = await self._send_group_message(
-                    bot_client, group_id, message_chain
+                # 群聊合并转发
+                result = await bot_client.api.call_action(
+                    "send_group_forward_msg",
+                    group_id=int(group_id),
+                    messages=forward_nodes
                 )
 
             # 验证消息发送结果
@@ -93,52 +92,20 @@ class AiocqhttpAdapter(BaseAdapter):
 
             return {
                 "success": True,
-                "message_id": result.get("message_id"),
+                "message_id": result.get("message_id") if isinstance(result, dict) else None,
                 "validation": validation_result,
-                "adapter": "aiocqhttp_optimized",
-                "nodes_count": len(nodes),
-                "method": "astrbot_native_nodes",
+                "adapter": "aiocqhttp_direct",
+                "nodes_count": len(forward_nodes),
+                "method": "send_group_forward_msg",
             }
 
         except Exception as e:
             return {
                 "success": False,
                 "error": str(e),
-                "adapter": "aiocqhttp_optimized",
-                "method": "astrbot_native_nodes",
+                "adapter": "aiocqhttp_direct",
+                "method": "error",
             }
-
-    async def _send_group_message(
-        self, bot_client: Any, group_id: str, message_chain: MessageChain
-    ) -> dict[str, Any]:
-        """发送群聊消息"""
-        try:
-            # 使用 aiocqhttp 的 send_group_msg API
-            result = await bot_client.api.call_action(
-                "send_group_msg", group_id=int(group_id), message=message_chain.chain
-            )
-            return result
-        except Exception:
-            # 如果原生组件失败，尝试降级到基础API
-            return await self._fallback_send_group_message(
-                bot_client, group_id, message_chain
-            )
-
-    async def _send_private_message(
-        self, bot_client: Any, user_id: str, message_chain: MessageChain
-    ) -> dict[str, Any]:
-        """发送私聊消息"""
-        try:
-            # 使用 aiocqhttp 的 send_private_msg API
-            result = await bot_client.api.call_action(
-                "send_private_msg", user_id=int(user_id), message=message_chain.chain
-            )
-            return result
-        except Exception:
-            # 如果原生组件失败，尝试降级到基础API
-            return await self._fallback_send_private_message(
-                bot_client, user_id, message_chain
-            )
 
     async def _fallback_send_group_message(
         self, bot_client: Any, group_id: str, message_chain: MessageChain

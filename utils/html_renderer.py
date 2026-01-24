@@ -1,16 +1,43 @@
 from pathlib import Path
 
+from astrbot.api import logger
 from .browser import render_template
 
 
 class HtmlRenderer:
-    def __init__(self):
+    _font_cache = {
+        "regular": None,
+        "bold": None
+    }
+
+    def __init__(self, data_path: Path = None):
         # Path to templates
         self.template_path = Path(__file__).parent / "templates"
+        self.data_path = data_path
+
+    def _load_fonts(self):
+        """Lazy load fonts into cache"""
+        if self._font_cache["regular"] and self._font_cache["bold"]:
+            return
+
+        try:
+            fonts_base64_dir = Path(__file__).parent / "resources" / "fonts_base64"
+            if not self._font_cache["regular"]:
+                with open(fonts_base64_dir / "SourceHanSansCN-Regular.txt", "r") as f:
+                    self._font_cache["regular"] = f.read().strip()
+            
+            if not self._font_cache["bold"]:
+                with open(fonts_base64_dir / "SourceHanSansCN-Bold.txt", "r") as f:
+                    self._font_cache["bold"] = f.read().strip()
+        except Exception as e:
+            logger.warning(f"读取内嵌字体失败: {e}")
 
     async def render(
         self, text: str, image_url: str = None, template_name: str = "css_news_card.html"
     ) -> bytes:
+        # Prapare fonts
+        self._load_fonts()
+        
         # Parse text into title and items
         lines = text.strip().split("\n")
         title = lines[0] if lines else ""
@@ -35,31 +62,25 @@ class HtmlRenderer:
             else:
                 items.append({"type": "text", "text": line})
 
-        # 读取Base64字体文件
-        font_base64_regular = ""
-        font_base64_bold = ""
-        try:
-            fonts_base64_dir = Path(__file__).parent / "resources" / "fonts_base64"
-            with open(fonts_base64_dir / "SourceHanSansCN-Regular.txt", "r") as f:
-                font_base64_regular = f.read().strip()
-            with open(fonts_base64_dir / "SourceHanSansCN-Bold.txt", "r") as f:
-                font_base64_bold = f.read().strip()
-        except Exception as e:
-            logger.warning(f"读取内嵌字体失败: {e}")
+        custom_uri = ""
+        if self.data_path:
+            custom_uri = self.data_path.resolve().as_uri()
 
         context = {
             "poster_url": image_url or "",
             "title": title,
             "items": items,
             "resource_path": (Path(__file__).parent / "resources").resolve().as_uri(),
-            "font_base64_regular": font_base64_regular,
-            "font_base64_bold": font_base64_bold,
+            "custom_resource_path": custom_uri,
+            "font_base64_regular": self._font_cache["regular"] or "",
+            "font_base64_bold": self._font_cache["bold"] or "",
         }
 
         return await render_template(
             template_path=self.template_path,
             template_name=template_name,
             context=context,
-            viewport={"width": 1920, "height": 1080},
+            viewport={"width": 800, "height": 600},  # 减小视口宽度，更像手机卡片
             selector=".card",
+            device_scale_factor=1.5, # 足够清晰但不过大
         )
