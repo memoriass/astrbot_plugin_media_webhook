@@ -11,117 +11,62 @@
     "hint": "HTTP服务器监听的端口号",
     "default": 60071
   },
-  "media_routes": {
-    "description": "媒体Webhook路由路径",
-    "type": "list",
-    "hint": "处理媒体相关推送的路由，格式为列表如 [\"/webhook\", \"/media-webhook\"]，或逗号分隔的字符串",
-    "default": [
-      "/media-webhook"
-    ]
-  },
-  "game_routes": {
-    "description": "游戏Webhook路由路径",
-    "type": "list",
-    "hint": "处理游戏相关推送的路由，格式为列表如 [\"/game-webhook\"]，留空则禁用游戏路由",
-    "default": [
-      "/game-webhook"
-    ]
-  },
-  "common_routes": {
-    "description": "通用/扩展Webhook路由路径",
-    "type": "list",
-    "hint": "处理 GitHub, DockerHub 等普通消息推送，默认路径 /webhook",
-    "default": [
-      "/webhook"
-    ]
-  },
-  "language": {
-    "description": "显示语言",
+  "media_template": {
+    "description": "媒体路由渲染模板",
     "type": "string",
-    "enum": [
-      "zh",
-      "en"
+    "options": [
+      "css_news_card.html",
+      "daily_ui_movie_card.html",
+      "modern_movie_card.html"
     ],
-    "default": "zh",
-    "hint": "输出消息和图片的语言 (zh/en)"
+    "hint": "选择媒体路由推送内容所使用的渲染样式",
+    "default": "css_news_card.html"
   },
-  "cache_ttl_seconds": {
-    "description": "重复请求缓存过期时间(秒)",
-    "type": "int",
-    "hint": "防止重复处理相同请求的缓存时间",
-    "default": 300
+  "game_template": {
+    "description": "游戏路由渲染模板",
+    "type": "string",
+    "options": [
+      "placeholder.html",
+      "game_recipe_card.html"
+    ],
+    "hint": "选择游戏路由推送内容所使用的渲染样式",
+    "default": "game_recipe_card.html"
   },
-  "batch_interval_seconds": {
-    "description": "批量发送间隔(秒)",
-    "type": "int",
-    "hint": "批量处理消息队列的时间间隔",
-    "default": 300
-  },
-  "batch_min_size": {
-    "description": "触发合并转发的最小消息数",
-    "type": "int",
-    "hint": "达到此数量时使用合并转发，否则单独发送",
-    "default": 3
+  "common_template": {
+    "description": "通用路由渲染模板",
+    "type": "string",
+    "options": [
+      "placeholder.html"
+    ],
+    "hint": "通用路由目前仅提供占位模板，等待用户寻找合适的模板",
+    "default": "placeholder.html"
   },
   "platform_name": {
     "description": "消息平台名称",
     "type": "string",
-    "hint": "发送消息的平台名称。设置为 'auto' 时自动检测可用平台，或手动指定如 llonebot、napcat、aiocqhttp、telegram 等",
+    "options": [
+      "auto",
+      "llonebot",
+      "napcat",
+      "aiocqhttp",
+      "telegram",
+      "kook",
+      "discord",
+      "onebotv11"
+    ],
+    "hint": "发送消息的平台名称。推荐使用 'auto' 自动检测",
     "default": "auto"
   },
-  "tmdb_api_key": {
-    "description": "TMDB API Key",
+  "preferred_translator": {
+    "description": "首选翻译引擎",
     "type": "string",
-    "hint": "用于获取剧集详细信息的 TMDB API 密钥，支持 Jellyfin/Emby/Plex 数据丰富，留空则跳过 TMDB 查询",
-    "default": ""
-  },
-  "fanart_api_key": {
-    "description": "Fanart.tv API Key",
-    "type": "string",
-    "hint": "用于获取高质量海报和背景图的 Fanart.tv API 密钥，作为 TMDB 图片的降级选项，留空则跳过 Fanart 查询",
-    "default": ""
-  },
-  "tvdb_api_key": {
-    "description": "TVDB API Key",
-    "type": "string",
-    "hint": "用于获取剧集详细信息的 TVDB API 密钥，作为 TMDB 的辅助数据源，留空则跳过 TVDB 查询",
-    "default": ""
-  },
-  "bgm_app_id": {
-    "description": "BGM.tv App ID",
-    "type": "string",
-    "hint": "用于获取动漫图片的 BGM.tv 应用 ID，留空则跳过 BGM.tv 图片查询",
-    "default": ""
-  },
-  "bgm_app_secret": {
-    "description": "BGM.tv App Secret",
-    "type": "string",
-    "hint": "用于获取动漫图片的 BGM.tv 应用密钥，留空则跳过 BGM.tv 图片查询",
-    "default": ""
-  },
-  "sender_id": {
-    "description": "发送者QQ号",
-    "type": "string",
-    "hint": "合并转发消息中显示的发送者QQ号",
-    "default": "2659908767"
-  },
-  "sender_name": {
-    "description": "发送者昵称",
-    "type": "string",
-    "hint": "合并转发消息中显示的发送者昵称",
-    "default": "媒体通知"
-  },
-  "game_ai_analyze": {
-    "description": "开启游戏Webhook AI分析",
-    "type": "bool",
-    "hint": "是否对游戏推送消息进行 AI 分析并展示分析结果",
-    "default": false
-  },
-  "game_ai_max_tokens": {
-    "description": "游戏AI分析最大字数",
-    "type": "int",
-    "hint": "AI 返回分析结果的最大字数限制",
-    "default": 150
+    "options": [
+      "tencent",
+      "baidu",
+      "google"
+    ],
+    "hint": "选择首选翻译 API，若失败则自动按顺序降级",
+    "default": "tencent"
   },
   "enable_translation": {
     "description": "启用剧情自动翻译",
@@ -129,16 +74,79 @@
     "hint": "当媒体剧作为非中文时，自动启用翻译",
     "default": false
   },
-  "preferred_translator": {
-    "description": "首选翻译引擎",
+  "media_routes": {
+    "description": "媒体Webhook路由路径",
+    "type": "list",
+    "hint": "处理媒体相关推送的路由",
+    "default": [
+      "/media-webhook"
+    ]
+  },
+  "game_routes": {
+    "description": "游戏Webhook路由路径",
+    "type": "list",
+    "hint": "处理游戏相关推送的路由",
+    "default": [
+      "/game-webhook"
+    ]
+  },
+  "common_routes": {
+    "description": "通用/扩展Webhook路由路径",
+    "type": "list",
+    "hint": "处理普通消息推送",
+    "default": [
+      "/webhook"
+    ]
+  },
+  "batch_interval_seconds": {
+    "description": "批量发送间隔(秒)",
+    "type": "int",
+    "default": 300
+  },
+  "batch_min_size": {
+    "description": "触发合并转发的最小消息数",
+    "type": "int",
+    "default": 3
+  },
+  "cache_ttl_seconds": {
+    "description": "重复请求缓存过期时间(秒)",
+    "type": "int",
+    "default": 300
+  },
+  "tmdb_api_key": {
+    "description": "TMDB API Key",
     "type": "string",
-    "enum": [
-      "tencent",
-      "baidu",
-      "google"
-    ],
-    "hint": "选择首选翻译 API，若失败则自动按顺序降级",
-    "default": "tencent"
+    "default": ""
+  },
+  "fanart_api_key": {
+    "description": "Fanart.tv API Key",
+    "type": "string",
+    "default": ""
+  },
+  "tvdb_api_key": {
+    "description": "TVDB API Key",
+    "type": "string",
+    "default": ""
+  },
+  "bgm_app_id": {
+    "description": "BGM.tv App ID",
+    "type": "string",
+    "default": ""
+  },
+  "bgm_app_secret": {
+    "description": "BGM.tv App Secret",
+    "type": "string",
+    "default": ""
+  },
+  "sender_id": {
+    "description": "发送者账号 (适配合并转发)",
+    "type": "string",
+    "default": "2659908767"
+  },
+  "sender_name": {
+    "description": "发送者昵称 (适配合并转发)",
+    "type": "string",
+    "default": "媒体通知"
   },
   "tencent_secret_id": {
     "description": "腾讯翻译 SecretId",
@@ -163,13 +171,11 @@
   "cache_persistence_days": {
     "description": "数据库缓存有效期(天)",
     "type": "int",
-    "hint": "SQLite 数据库中元数据缓存的天数，默认为 7 天",
     "default": 7
   },
   "webhook_token": {
     "description": "Webhook 鉴权 Token",
     "type": "string",
-    "hint": "如果设置，请求 header 必须包含 X-Webhook-Token 且匹配此值",
     "default": ""
   }
 }

@@ -2,7 +2,7 @@
 import json
 from typing import Dict, Any, Optional
 from astrbot.api import logger
-from ..utils.i18n import t
+
 
 class CommonHandler:
     """处理通用和扩展 Webhook (GitHub, DockerHub 等)"""
@@ -23,7 +23,7 @@ class CommonHandler:
             except json.JSONDecodeError:
                 # 纯文本处理
                 return {
-                    "message_text": f"{t('common_webhook')}:\n{body}",
+                    "message_text": f"通用Webhook:\n{body}",
                     "message_type": "common"
                 }
 
@@ -41,7 +41,7 @@ class CommonHandler:
 
             # 5. 极端兜底：将整个 JSON 格式化输出
             return {
-                "message_text": f"{t('common_webhook')}:\n{json.dumps(data, indent=2, ensure_ascii=False)}",
+                "message_text": f"通用Webhook:\n{json.dumps(data, indent=2, ensure_ascii=False)}",
                 "message_type": "common"
             }
 
@@ -59,24 +59,24 @@ class CommonHandler:
             if event == "push":
                 ref = data.get("ref", "").split("/")[-1]
                 commits = data.get("commits", [])
-                msg = f"{t('gh_push')} - {repo_name}\n"
-                msg += f"{t('branch', '分支')}: {ref}\n"
-                msg += f"{t('pusher', '推送者')}: {sender}\n"
+                msg = f"GitHub推送 - {repo_name}\n"
+                msg += f"分支: {ref}\n"
+                msg += f"推送者: {sender}\n"
                 if commits:
-                    msg += f"{t('summary', '摘要')}: {commits[0].get('message', '').splitlines()[0]}"
+                    msg += f"摘要: {commits[0].get('message', '').splitlines()[0]}"
                 return {"message_text": msg, "message_type": "common"}
             
             elif event == "release":
                 action = data.get("action", "")
                 tag = data.get("release", {}).get("tag_name", "")
-                msg = f"{t('gh_release')} {action.capitalize()} - {repo_name}\n"
-                msg += f"{t('version', '版本')}: {tag}\n"
-                msg += f"{t('publisher', '发布者')}: {sender}"
+                msg = f"GitHub发布 {action} - {repo_name}\n"
+                msg += f"版本: {tag}\n"
+                msg += f"发布者: {sender}"
                 return {"message_text": msg, "message_type": "common"}
 
             # 其他事件显示类型
             return {
-                "message_text": f"⚓ GitHub Event: {event}\n{t('repo', '仓库')}: {repo_name}\n{t('user', '用户')}: {sender}",
+                "message_text": f"⚓ GitHub Event: {event}\n仓库: {repo_name}\n用户: {sender}",
                 "message_type": "common"
             }
         except:
@@ -87,8 +87,8 @@ class CommonHandler:
         tag = data.get("push_data", {}).get("tag", "latest")
         pusher = data.get("push_data", {}).get("pusher", "Unknown")
         
-        msg = f"{t('docker_update')}\n"
-        msg += f"{t('repo', '仓库')}: {repo}\n"
-        msg += f"{t('tag', '标签')}: {tag}\n"
-        msg += f"{t('pusher', '推送者')}: {sender if 'sender' in locals() else pusher}"
+        msg = f"DockerHub更新\n"
+        msg += f"仓库: {repo}\n"
+        msg += f"标签: {tag}\n"
+        msg += f"推送者: {pusher}"
         return {"message_text": msg, "message_type": "common"}

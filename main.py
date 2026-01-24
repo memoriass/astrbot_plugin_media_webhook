@@ -2,6 +2,7 @@ import asyncio
 import json
 import time
 import uuid
+from pathlib import Path
 import aiohttp
 import requests
 
@@ -11,7 +12,8 @@ from aiohttp.web import Request, Response
 import astrbot.api.message_components as Comp
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
-from astrbot.api.star import Context, Star, register
+from astrbot.api.star import Context, Star
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .adapters import AdapterFactory
 from .media import MediaHandler, MediaDataProcessor
@@ -30,14 +32,7 @@ DEFAULT_CACHE_TTL = 300
 DEFAULT_BATCH_INTERVAL = 300
 
 
-@register(
-    "media_webhook",
-    "memoriass",
-    "通用 Webhook 推送插件，支持媒体、游戏及自定义消息推送",
-    "1.3.0",
-    "https://github.com/memoriass/astrbot_plugin_webhook_push",
-)
-class WebhookPushPlugin(Star):
+class Main(Star):
     """通用 Webhook 推送插件"""
 
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -68,9 +63,15 @@ class WebhookPushPlugin(Star):
         self.game_routes = self._parse_routes(config.get("game_routes", ["/game-webhook"]))
         self.common_routes = self._parse_routes(config.get("common_routes", ["/webhook"]))
         
+        # 模板配置
+        self.media_template = config.get("media_template", "css_news_card.html")
+        self.game_template = config.get("game_template", "placeholder.html")
+        self.common_template = config.get("common_template", "placeholder.html")
+        
         # 初始化子模块
         # 获取标准数据路径
-        base_data_path = self.get_astrbot_data_path()
+        base_data_path = Path(get_astrbot_data_path()) / "plugin_data" / "astrbot_plugin_webhook_push"
+        base_data_path.mkdir(parents=True, exist_ok=True)
         
         enrichment_config = {
             "tmdb_api_key": config.get("tmdb_api_key", ""),
@@ -119,11 +120,12 @@ class WebhookPushPlugin(Star):
         """初始化插件，启动 Webhook 服务器和批处理器"""
         try:
             # 恢复持久化队列
-            saved_queue = await self.context.get_kv_data("persistent_msg_queue", [])
+            saved_queue = await self.get_kv_data("persistent_msg_queue", [])
             if saved_queue:
                 self.message_queue.extend(saved_queue)
                 logger.info(f"已恢复 {len(saved_queue)} 条未处理消息")
             
+            logger.info("准备进行浏览器环境自检...")
             await BrowserManager.init()
             await self.start_webhook_server()
             self.batch_processor_task = asyncio.create_task(self.start_batch_processor())
@@ -134,7 +136,7 @@ class WebhookPushPlugin(Star):
     async def _save_queue(self):
         """持久化队列到 KV"""
         try:
-            await self.context.put_kv_data("persistent_msg_queue", self.message_queue)
+            await self.put_kv_data("persistent_msg_queue", self.message_queue)
         except Exception as e:
             logger.error(f"保存队列失败: {e}")
 
@@ -219,12 +221,12 @@ class WebhookPushPlugin(Star):
         """处理媒体相关 Webhook 请求"""
         trace_id = str(uuid.uuid4())[:8]
         if not self._check_auth(request):
-            logger.warning(f"[{trace_id}] {t('unauthorized')}: {request.remote}")
+            logger.warning(f"[{trace_id}] 未授权: {request.remote}")
             return Response(text="Unauthorized", status=401)
         try:
             body_text = await request.text()
             headers = dict(request.headers)
-            logger.info(f"[{trace_id}][{t('media_webhook')}] 收到 Webhook 请求: {request.path}")
+            logger.info(f"[{trace_id}][媒体Webhook] 收到 Webhook 请求: {request.path}")
             
             # 加入队列，标记为需要媒体检测
             raw_payload = {
@@ -233,9 +235,10 @@ class WebhookPushPlugin(Star):
                 "timestamp": time.time(),
                 "message_type": "raw_media",
                 "trace_id": trace_id,
+                "template": self.media_template
             }
             await self._enqueue(raw_payload)
-            return Response(text=f"{t('queue_success')} (ID: {trace_id})", status=200)
+            return Response(text=f"已加入队列 (ID: {trace_id})", status=200)
         except Exception as e:
             logger.error(f"[{trace_id}] Webhook 处理出错: {e}")
             return Response(text="Internal Error", status=500)
@@ -244,12 +247,12 @@ class WebhookPushPlugin(Star):
         """处理游戏相关 Webhook 请求"""
         trace_id = str(uuid.uuid4())[:8]
         if not self._check_auth(request):
-            logger.warning(f"[{trace_id}] {t('unauthorized')}: {request.remote}")
+            logger.warning(f"[{trace_id}] 未授权: {request.remote}")
             return Response(text="Unauthorized", status=401)
         try:
             body_text = await request.text()
             headers = dict(request.headers)
-            logger.info(f"[{trace_id}][{t('game_webhook')}] 收到 Webhook 请求: {request.path}")
+            logger.info(f"[{trace_id}][游戏Webhook] 收到 Webhook 请求: {request.path}")
             
             payload = json.loads(body_text)
             result = await self.game_handler.process_game_webhook(payload, headers)
@@ -258,10 +261,11 @@ class WebhookPushPlugin(Star):
                 result["message_type"] = "game"
                 result["timestamp"] = time.time()
                 result["trace_id"] = trace_id
+                result["template"] = self.game_template
                 await self._enqueue(result)
-                return Response(text=f"{t('queue_success')} (ID: {trace_id})", status=200)
+                return Response(text=f"已加入队列 (ID: {trace_id})", status=200)
 
-            return Response(text=f"{t('invalid_data')}", status=400)
+            return Response(text="无效数据", status=400)
         except Exception as e:
             logger.error(f"[{trace_id}] Webhook 处理出错: {e}")
             return Response(text="Internal Error", status=500)
@@ -270,22 +274,23 @@ class WebhookPushPlugin(Star):
         """处理通用相关 Webhook 请求"""
         trace_id = str(uuid.uuid4())[:8]
         if not self._check_auth(request):
-            logger.warning(f"[{trace_id}] {t('unauthorized')}: {request.remote}")
+            logger.warning(f"[{trace_id}] 未授权: {request.remote}")
             return Response(text="Unauthorized", status=401)
         try:
             body_text = await request.text()
             headers = dict(request.headers)
-            logger.info(f"[{trace_id}][{t('common_webhook')}] 收到 Webhook 请求: {request.path}")
+            logger.info(f"[{trace_id}][通用Webhook] 收到 Webhook 请求: {request.path}")
             
             result = await self.common_handler.process_common_webhook(body_text, headers)
             
             if result and "message_text" in result:
                 result["timestamp"] = time.time()
                 result["trace_id"] = trace_id
+                result["template"] = self.common_template
                 await self._enqueue(result)
-                return Response(text=f"{t('queue_success')} (ID: {trace_id})", status=200)
+                return Response(text=f"已加入队列 (ID: {trace_id})", status=200)
             
-            return Response(text=f"{t('invalid_data')}", status=400)
+            return Response(text="无效数据", status=400)
         except Exception as e:
             logger.error(f"[{trace_id}] Webhook 处理出错: {e}")
             return Response(text="Internal Error", status=500)
@@ -321,13 +326,14 @@ class WebhookPushPlugin(Star):
                 processed = await self.data_processor.detect_and_process_raw_data(msg)
                 if processed:
                     processed["trace_id"] = trace_id
+                    processed["template"] = msg.get("template", self.media_template)
                     final_messages.append(processed)
             else:
                 # 已经是标准格式 (game 或 common)
                 final_messages.append(msg)
 
         if final_messages:
-            logger.info(t("batch_start").format(len(final_messages)))
+            logger.info(f"开始批量处理 {len(final_messages)} 条消息")
             await self.send_intelligently(final_messages)
         
         self.last_batch_time = time.time()
@@ -346,12 +352,14 @@ class WebhookPushPlugin(Star):
             rendered_messages = []
             for msg in messages:
                 trace_id = msg.get("trace_id", "Unknown")
-                logger.info(f"[{trace_id}] {t('rendering')}")
+                logger.info(f"[{trace_id}] 正在渲染")
                 # 使用 HtmlRenderer 异步渲染
                 img = await self.image_renderer.render(
                     msg["message_text"],
-                    msg.get("image_url")
+                    msg.get("poster_url") or msg.get("image_url"),
+                    template_name=msg.get("template", "card_default.html")
                 )
+
                 if img:
                     rendered_messages.append({
                         "message_text": "[图片通知]",
@@ -385,16 +393,17 @@ class WebhookPushPlugin(Star):
         for msg in messages:
             trace_id = msg.get("trace_id", "Unknown")
             try:
-                logger.info(f"[{trace_id}] {t('rendering')}")
+                logger.info(f"[{trace_id}] 正在渲染")
                 # 使用 HtmlRenderer 异步渲染
                 img = await self.image_renderer.render(
                     msg["message_text"],
-                    msg.get("image_url")
+                    msg.get("poster_url") or msg.get("image_url"),
+                    template_name=msg.get("template", "card_default.html")
                 )
                 if img:
                     chain = MessageChain([Comp.Image.fromBytes(img)])
                     await self.context.send_message(origin, chain)
-                    logger.info(f"[{trace_id}] {t('send_success')}")
+                    logger.info(f"[{trace_id}] 发送成功")
                     await asyncio.sleep(0.5)
             except Exception as e:
                 logger.error(f"单条消息发送失败: {e}")

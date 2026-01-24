@@ -4,6 +4,10 @@
 """
 
 import json
+import os
+import random
+import base64
+from pathlib import Path
 from astrbot.api import logger
 
 class GameHandler:
@@ -13,6 +17,8 @@ class GameHandler:
         """初始化游戏处理器"""
         self.context = context
         self.config = config or {}
+        # 资源目录路径
+        self.bg_resource_path = Path(__file__).parent.parent / "utils" / "resources" / "game_bg"
     
     async def process_game_webhook(self, payload: dict, headers: dict = None) -> dict:
         """
@@ -47,9 +53,54 @@ class GameHandler:
             "status": "success",
             "message_text": message_text,
             "source": source,
-            "game_data": payload
+            "game_data": payload,
+            "poster_url": self._get_random_bg_for_source(source)
         }
     
+    def _get_random_bg_for_source(self, source: str) -> str:
+        """根据来源获取本地随机背景图，返回 base64 data url"""
+        if not self.bg_resource_path.exists():
+            return ""
+        
+        # 搜寻逻辑：
+        # 直接使用来源名称作为前缀，例如 source='alas' 匹配 alas001.jpg, alas002.png 等
+        # 如果未识别到任何匹配项，则搜索以 'default' 开头的图片
+        search_prefix = source.lower() if source else "default"
+
+        # 获取目录下所有匹配的文件
+        matches = []
+        try:
+            for file in self.bg_resource_path.iterdir():
+                if file.suffix.lower() in [".jpg", ".jpeg", ".png", ".webp"]:
+                    # 匹配逻辑：文件名以来源名开头
+                    if file.name.lower().startswith(search_prefix):
+                        matches.append(file)
+            
+            # 如果来源没有匹配到，或者来源原本就是 default，则尝试寻找 default 开头的图
+            if not matches and search_prefix != "default":
+                for file in self.bg_resource_path.iterdir():
+                    if file.suffix.lower() in [".jpg", ".jpeg", ".png", ".webp"]:
+                        if file.name.lower().startswith("default"):
+                            matches.append(file)
+            
+            if not matches:
+                return ""
+            
+            # 随机选择一张
+            selected_file = random.choice(matches)
+            
+            # 读取并转为 base64
+            with open(selected_file, "rb") as f:
+                img_data = f.read()
+                b64 = base64.b64encode(img_data).decode()
+                ext = selected_file.suffix.lower().replace(".", "")
+                if ext == "jpg": ext = "jpeg"
+                return f"data:image/{ext};base64,{b64}"
+                
+        except Exception as e:
+            logger.error(f"加载本地游戏背景图失败: {e}")
+            return ""
+
     async def _analyze_with_ai(self, payload: dict) -> str:
         """使用 AstrBot LLM 分析推送内容中的错误信息"""
         max_tokens = self.config.get("game_ai_max_tokens", 150)

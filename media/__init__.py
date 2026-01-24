@@ -7,7 +7,7 @@
 from .data_processor import MediaDataProcessor
 from .media_handler import MediaHandler
 from .enrichment import EnrichmentManager
-from .translator import MediaTranslator
+
 from .processors.base_processor import BaseMediaProcessor
 from .processors.emby_processor import EmbyProcessor
 from .processors.jellyfin_processor import JellyfinProcessor
@@ -19,7 +19,7 @@ __all__ = [
     "MediaDataProcessor",
     "MediaHandler",
     "EnrichmentManager",
-    "MediaTranslator",
+
     "BaseMediaProcessor",
     "EmbyProcessor",
     "JellyfinProcessor",
