@@ -35,11 +35,25 @@ class HtmlRenderer:
             else:
                 items.append({"type": "text", "text": line})
 
+        # 读取Base64字体文件
+        font_base64_regular = ""
+        font_base64_bold = ""
+        try:
+            fonts_base64_dir = Path(__file__).parent / "resources" / "fonts_base64"
+            with open(fonts_base64_dir / "SourceHanSansCN-Regular.txt", "r") as f:
+                font_base64_regular = f.read().strip()
+            with open(fonts_base64_dir / "SourceHanSansCN-Bold.txt", "r") as f:
+                font_base64_bold = f.read().strip()
+        except Exception as e:
+            logger.warning(f"读取内嵌字体失败: {e}")
+
         context = {
             "poster_url": image_url or "",
             "title": title,
             "items": items,
             "resource_path": (Path(__file__).parent / "resources").resolve().as_uri(),
+            "font_base64_regular": font_base64_regular,
+            "font_base64_bold": font_base64_bold,
         }
 
         return await render_template(
