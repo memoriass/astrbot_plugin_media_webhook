@@ -26,7 +26,6 @@
     "description": "游戏路由渲染模板",
     "type": "string",
     "options": [
-      "placeholder.html",
       "game_recipe_card.html"
     ],
     "hint": "选择游戏路由推送内容所使用的渲染样式",
@@ -36,10 +35,10 @@
     "description": "通用路由渲染模板",
     "type": "string",
     "options": [
-      "placeholder.html"
+      "common_blog_card.html"
     ],
-    "hint": "通用路由目前仅提供占位模板，等待用户寻找合适的模板",
-    "default": "placeholder.html"
+    "hint": "选择通用路由推送内容所使用的渲染样式",
+    "default": "common_blog_card.html"
   },
   "platform_name": {
     "description": "消息平台名称",
@@ -125,16 +124,6 @@
   },
   "tvdb_api_key": {
     "description": "TVDB API Key",
-    "type": "string",
-    "default": ""
-  },
-  "bgm_app_id": {
-    "description": "BGM.tv App ID",
-    "type": "string",
-    "default": ""
-  },
-  "bgm_app_secret": {
-    "description": "BGM.tv App Secret",
     "type": "string",
     "default": ""
   },

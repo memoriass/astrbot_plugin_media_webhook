@@ -3,8 +3,6 @@
 处理未知来源或通用格式的媒体数据
 """
 
-from typing import Optional
-
 from astrbot.api import logger
 
 from .base_processor import BaseMediaProcessor
@@ -13,11 +11,11 @@ from .base_processor import BaseMediaProcessor
 class GenericProcessor(BaseMediaProcessor):
     """通用媒体处理器"""
 
-    def can_handle(self, data: dict, headers: Optional[dict] = None) -> bool:
+    def can_handle(self, data: dict, headers: dict | None = None) -> bool:
         """通用处理器可以处理任何数据"""
         return True
 
-    def convert_to_standard(self, data: dict, headers: Optional[dict] = None) -> dict:
+    def convert_to_standard(self, data: dict, headers: dict | None = None) -> dict:
         """将通用数据转换为标准格式"""
         try:
             logger.debug(f"通用转换器处理数据: {data}")

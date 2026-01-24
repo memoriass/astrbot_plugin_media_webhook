@@ -6,24 +6,22 @@
 
 import html
 import time
-from typing import Optional
 
 from astrbot.api import logger
 
-from .processors import ProcessorManager
 from .enrichment import EnrichmentManager
+from .processors import ProcessorManager
 
 
 class MediaHandler:
     """媒体处理器 - 处理 Emby、Plex、Jellyfin 等媒体服务器数据"""
 
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: dict | None = None):
         # 初始化处理器管理器
         self.processor_manager = ProcessorManager()
 
         # 初始化数据丰富管理器
         self.enrichment_manager = EnrichmentManager(config)
-
 
         logger.info("媒体处理器初始化完成")
 
@@ -58,7 +56,6 @@ class MediaHandler:
             logger.debug(f"  原始图片URL: {media_data.get('image_url', '无')}")
             enriched_data = await self.enrichment_manager.enrich_media_data(media_data)
 
-
             # 4. 获取图片（如果还没有图片）
             if not enriched_data.get("image_url"):
                 logger.info("尝试获取图片")
@@ -81,7 +78,7 @@ class MediaHandler:
             return self.create_fallback_payload(raw_data, source)
 
     def convert_to_standard_format(
-        self, raw_data: dict, source: str, headers: Optional[dict] = None
+        self, raw_data: dict, source: str, headers: dict | None = None
     ) -> dict:
         """将不同来源的数据转换为标准格式"""
         try:
@@ -209,9 +206,9 @@ class MediaHandler:
 
             # 数据来源标记
             if data.get("tmdb_enriched"):
-                message_parts.append(f"[*] 数据来源: TMDB")
+                message_parts.append("[*] 数据来源: TMDB")
             elif data.get("bgm_enriched"):
-                message_parts.append(f"[*] 数据来源: BGM.TV")
+                message_parts.append("[*] 数据来源: BGM.TV")
 
             return "\n".join(message_parts)
 

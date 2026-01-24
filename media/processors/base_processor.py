@@ -6,7 +6,7 @@
 import html
 import re
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 from astrbot.api import logger
 
@@ -18,12 +18,12 @@ class BaseMediaProcessor(ABC):
         pass
 
     @abstractmethod
-    def can_handle(self, data: dict, headers: Optional[dict] = None) -> bool:
+    def can_handle(self, data: dict, headers: dict | None = None) -> bool:
         """检查是否能处理该数据源"""
         pass
 
     @abstractmethod
-    def convert_to_standard(self, data: dict, headers: Optional[dict] = None) -> dict:
+    def convert_to_standard(self, data: dict, headers: dict | None = None) -> dict:
         """将数据转换为标准格式"""
         pass
 

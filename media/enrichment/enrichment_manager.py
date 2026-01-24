@@ -4,32 +4,34 @@
 """
 
 import os
-from typing import Dict, List, Optional
 
 from astrbot.api import logger
 
-from .base_provider import MediaEnrichmentProvider, MediaImageProvider, BaseProvider
+from ..cache_manager import CacheManager
+from .base_provider import MediaEnrichmentProvider, MediaImageProvider
+from .bgm_provider import BGMProvider
 from .tmdb_provider import TMDBProvider
 from .tvdb_provider import TVDBProvider
-from .bgm_provider import BGMProvider
-from ..cache_manager import CacheManager
+
 
 class EnrichmentManager:
     """媒体数据丰富管理器"""
 
-    def __init__(self, config: Optional[Dict] = None):
+    def __init__(self, config: dict | None = None):
         self.config = config or {}
-        self.enrichment_providers: List[MediaEnrichmentProvider] = []
-        self.image_providers: List[MediaImageProvider] = []
+        self.enrichment_providers: list[MediaEnrichmentProvider] = []
+        self.image_providers: list[MediaImageProvider] = []
 
         # 初始化持久化缓存
         # 优先从配置获取数据路径
         db_dir = self.config.get("data_path")
         if not db_dir:
             # Fallback (old logic, ideally not hit)
-            root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            root_dir = os.path.dirname(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            )
             db_dir = os.path.join(root_dir, "data")
-        
+
         persistence_days = self.config.get("cache_persistence_days", 7)
         self.cache = CacheManager(db_dir, persistence_days)
         # 启动时简单清理一次
@@ -59,9 +61,7 @@ class EnrichmentManager:
             logger.info("TVDB 提供者已启用")
 
         # BGM.tv 提供者 (同时支持丰富和图片)
-        bgm_app_id = self.config.get("bgm_app_id", "")
-        bgm_app_secret = self.config.get("bgm_app_secret", "")
-        # BGM 不需要 API Key 也可以进行基础搜索，但有 ID 更好
+        # BGM 不需要 API Key 也可以进行基础搜索
         bgm_provider = BGMProvider(self.config)
         self.enrichment_providers.append(bgm_provider)
         self.image_providers.append(bgm_provider)
@@ -139,13 +139,18 @@ class EnrichmentManager:
         p_ids = media_data.get("provider_ids", {})
         if p_ids:
             for platform in ["TMDB", "IMDB", "TVDB"]:
-                id_val = p_ids.get(platform) or p_ids.get(platform.capitalize()) or p_ids.get(platform.lower())
+                id_val = (
+                    p_ids.get(platform)
+                    or p_ids.get(platform.capitalize())
+                    or p_ids.get(platform.lower())
+                )
                 if id_val:
                     return f"{platform}_{id_val}"
-        
+
         # 兜底：使用 名称+类型+年份 的组合哈希
         key_str = f"{item_name}_{item_type}_{year}".lower().strip()
         import hashlib
+
         return hashlib.md5(key_str.encode()).hexdigest()
 
     async def get_media_image(self, media_data: dict) -> str:
@@ -172,7 +177,7 @@ class EnrichmentManager:
             logger.error(f"图片获取出错: {e}")
             return ""
 
-    def get_provider_status(self) -> Dict:
+    def get_provider_status(self) -> dict:
         """获取提供者状态"""
         return {
             "enrichment_providers": [
@@ -180,10 +185,10 @@ class EnrichmentManager:
                 for p in self.enrichment_providers
             ],
             "image_providers": [
-                {"name": p.name, "priority": p.priority}
-                for p in self.image_providers
-            ]
+                {"name": p.name, "priority": p.priority} for p in self.image_providers
+            ],
         }
+
 
 # 向后兼容的别名
 MediaEnrichmentManager = EnrichmentManager

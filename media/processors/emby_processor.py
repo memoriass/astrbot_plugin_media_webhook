@@ -3,8 +3,6 @@ Emby媒体处理器
 专门处理Emby媒体服务器的webhook数据
 """
 
-from typing import Optional
-
 from astrbot.api import logger
 
 from .base_processor import BaseMediaProcessor
@@ -13,7 +11,7 @@ from .base_processor import BaseMediaProcessor
 class EmbyProcessor(BaseMediaProcessor):
     """Emby媒体处理器"""
 
-    def can_handle(self, data: dict, headers: Optional[dict] = None) -> bool:
+    def can_handle(self, data: dict, headers: dict | None = None) -> bool:
         """检查是否为Emby数据"""
         # Emby特征：包含Item和Server字段
         if "Item" in data and "Server" in data:
@@ -29,7 +27,7 @@ class EmbyProcessor(BaseMediaProcessor):
 
         return False
 
-    def convert_to_standard(self, data: dict, headers: Optional[dict] = None) -> dict:
+    def convert_to_standard(self, data: dict, headers: dict | None = None) -> dict:
         """将Emby数据转换为标准格式"""
         try:
             item = data.get("Item", {})
@@ -40,7 +38,7 @@ class EmbyProcessor(BaseMediaProcessor):
             # 提取基本信息
             item_type = item.get("Type", "Unknown")
             item_name = item.get("Name", "")
-            
+
             # 提取剧集/音乐信息
             series_name = ""
             season_number = ""
@@ -57,7 +55,7 @@ class EmbyProcessor(BaseMediaProcessor):
                 series_name = item_name
             elif item_type == "Audio":
                 # 音乐处理
-                series_name = item.get("AlbumArtist", "") # 艺术家
+                series_name = item.get("AlbumArtist", "")  # 艺术家
                 album_name = item.get("Album", "")
                 if album_name:
                     item_name = f"{album_name} - {item_name}"
@@ -67,7 +65,7 @@ class EmbyProcessor(BaseMediaProcessor):
 
             # 提取外部 ID (非常关键，用于后续数据富化)
             provider_ids = item.get("ProviderIds", {})
-            
+
             # 提取其他信息
             year = item.get("ProductionYear", "")
             overview = self.clean_text(item.get("Overview", ""))
@@ -112,7 +110,7 @@ class EmbyProcessor(BaseMediaProcessor):
             result["metadata"] = self.extract_emby_metadata(item)
             result["provider_ids"] = provider_ids
             result["emby_event"] = event
-            
+
             # 如果是播放事件，可以附带用户信息
             user = data.get("User", {})
             if user and "Name" in user:

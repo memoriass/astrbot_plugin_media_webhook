@@ -3,8 +3,6 @@ Jellyfin媒体处理器
 专门处理Jellyfin媒体服务器的webhook数据
 """
 
-from typing import Optional
-
 from astrbot.api import logger
 
 from .base_processor import BaseMediaProcessor
@@ -13,10 +11,12 @@ from .base_processor import BaseMediaProcessor
 class JellyfinProcessor(BaseMediaProcessor):
     """Jellyfin媒体处理器"""
 
-    def can_handle(self, data: dict, headers: Optional[dict] = None) -> bool:
+    def can_handle(self, data: dict, headers: dict | None = None) -> bool:
         """检查是否为Jellyfin数据"""
         # Jellyfin特征：包含ItemType或SeriesName字段，或者包含NotificationType
-        if any(k in data for k in ["ItemType", "SeriesName", "NotificationType", "ItemId"]):
+        if any(
+            k in data for k in ["ItemType", "SeriesName", "NotificationType", "ItemId"]
+        ):
             logger.debug("检测到Jellyfin数据结构特征")
             return True
 
@@ -35,7 +35,7 @@ class JellyfinProcessor(BaseMediaProcessor):
 
         return False
 
-    def convert_to_standard(self, data: dict, headers: Optional[dict] = None) -> dict:
+    def convert_to_standard(self, data: dict, headers: dict | None = None) -> dict:
         """将Jellyfin数据转换为标准格式"""
         try:
             logger.debug(f"Jellyfin 原始数据结构: {data}")
@@ -56,8 +56,12 @@ class JellyfinProcessor(BaseMediaProcessor):
 
             # 提取剧集信息
             series_name = payload.get("SeriesName", "")
-            season_number = payload.get("SeasonNumber", payload.get("ParentIndexNumber", ""))
-            episode_number = payload.get("EpisodeNumber", payload.get("IndexNumber", ""))
+            season_number = payload.get(
+                "SeasonNumber", payload.get("ParentIndexNumber", "")
+            )
+            episode_number = payload.get(
+                "EpisodeNumber", payload.get("IndexNumber", "")
+            )
 
             # 如果是剧集类型但没有剧集名，使用Name作为剧集名
             if item_type in ["Series", "Season"] and not series_name:
@@ -101,7 +105,7 @@ class JellyfinProcessor(BaseMediaProcessor):
 
             # 附加元数据
             result["metadata"] = self.extract_jellyfin_metadata(payload)
-            
+
             logger.debug(f"Jellyfin 转换结果: {result}")
             return result
 

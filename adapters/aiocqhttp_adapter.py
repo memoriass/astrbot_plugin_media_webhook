@@ -4,7 +4,7 @@
 支持 AstrBot 原生 Node/Nodes 组件和消息验证
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import astrbot.api.message_components as Comp
 from astrbot.api.event import MessageChain
@@ -179,7 +179,7 @@ class AiocqhttpAdapter(BaseAdapter):
         bot_client: Any,
         send_result: dict,
         group_id: str,
-        user_id: Optional[str] = None,
+        user_id: str | None = None,
     ) -> dict[str, Any]:
         """验证消息是否成功发送"""
         validation = {"validated": False, "message_exists": False, "error": None}

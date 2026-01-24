@@ -3,7 +3,7 @@
 负责管理和调度不同的媒体处理器
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from astrbot.api import logger
 
@@ -19,7 +19,7 @@ class ProcessorManager:
 
     def __init__(self):
         # 初始化所有处理器，按优先级排序
-        self.processors: List[BaseMediaProcessor] = [
+        self.processors: list[BaseMediaProcessor] = [
             EmbyProcessor(),
             JellyfinProcessor(),
             PlexProcessor(),
@@ -29,7 +29,7 @@ class ProcessorManager:
         logger.info("媒体处理器管理器初始化完成")
         logger.info(f"已注册处理器: {[p.__class__.__name__ for p in self.processors]}")
 
-    def detect_source(self, data: dict, headers: Optional[dict] = None) -> str:
+    def detect_source(self, data: dict, headers: dict | None = None) -> str:
         """检测数据源类型"""
         try:
             for processor in self.processors:
@@ -45,7 +45,7 @@ class ProcessorManager:
             logger.error(f"数据源检测失败: {e}")
             return "generic"
 
-    def get_processor(self, source: str) -> Optional[BaseMediaProcessor]:
+    def get_processor(self, source: str) -> BaseMediaProcessor | None:
         """根据源类型获取对应的处理器"""
         processor_map = {
             "emby": EmbyProcessor,
@@ -62,7 +62,7 @@ class ProcessorManager:
         return GenericProcessor()
 
     def convert_to_standard(
-        self, data: dict, source: str = None, headers: Optional[dict] = None
+        self, data: dict, source: str = None, headers: dict | None = None
     ) -> dict:
         """将数据转换为标准格式"""
         try:
@@ -98,7 +98,7 @@ class ProcessorManager:
             logger.debug(f"数据转换失败详情: {e}", exc_info=True)
             return {}
 
-    def get_processor_info(self) -> Dict[str, Any]:
+    def get_processor_info(self) -> dict[str, Any]:
         """获取处理器信息"""
         info = {"total_processors": len(self.processors), "processors": []}
 
@@ -113,8 +113,8 @@ class ProcessorManager:
         return info
 
     def test_processor(
-        self, source: str, test_data: dict, headers: Optional[dict] = None
-    ) -> Dict[str, Any]:
+        self, source: str, test_data: dict, headers: dict | None = None
+    ) -> dict[str, Any]:
         """测试指定处理器"""
         try:
             processor = self.get_processor(source)

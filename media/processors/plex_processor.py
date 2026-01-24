@@ -3,8 +3,6 @@ Plex媒体处理器
 专门处理Plex媒体服务器的webhook数据
 """
 
-from typing import Optional
-
 from astrbot.api import logger
 
 from .base_processor import BaseMediaProcessor
@@ -13,7 +11,7 @@ from .base_processor import BaseMediaProcessor
 class PlexProcessor(BaseMediaProcessor):
     """Plex媒体处理器"""
 
-    def can_handle(self, data: dict, headers: Optional[dict] = None) -> bool:
+    def can_handle(self, data: dict, headers: dict | None = None) -> bool:
         """检查是否为Plex数据"""
         # Plex特征：包含Metadata或Player字段
         if "Metadata" in data or "Player" in data:
@@ -29,7 +27,7 @@ class PlexProcessor(BaseMediaProcessor):
 
         return False
 
-    def convert_to_standard(self, data: dict, headers: Optional[dict] = None) -> dict:
+    def convert_to_standard(self, data: dict, headers: dict | None = None) -> dict:
         """将Plex数据转换为标准格式"""
         try:
             logger.debug(f"Plex 原始数据结构: {data}")
@@ -76,10 +74,12 @@ class PlexProcessor(BaseMediaProcessor):
             elif item_type == "Series":
                 series_name = item_name
             elif item_type == "Song":
-                series_name = metadata.get("grandparentTitle", "") # Artist
-                item_name = f"{metadata.get('parentTitle', '')} - {item_name}" # Album - Song
+                series_name = metadata.get("grandparentTitle", "")  # Artist
+                item_name = (
+                    f"{metadata.get('parentTitle', '')} - {item_name}"  # Album - Song
+                )
             elif item_type == "Album":
-                series_name = metadata.get("parentTitle", "") # Artist
+                series_name = metadata.get("parentTitle", "")  # Artist
 
             # 提取其他信息
             year = metadata.get("year", "")
@@ -96,13 +96,18 @@ class PlexProcessor(BaseMediaProcessor):
             # 提取图片信息
             image_url = ""
             # 优先顺序: thumb -> art -> parentThumb -> grandparentThumb
-            thumb = metadata.get("thumb") or metadata.get("art") or metadata.get("parentThumb") or metadata.get("grandparentThumb")
-            
+            thumb = (
+                metadata.get("thumb")
+                or metadata.get("art")
+                or metadata.get("parentThumb")
+                or metadata.get("grandparentThumb")
+            )
+
             if thumb:
                 # Plex的thumb通常是相对路径，需要拼接服务器地址
                 server_info = data.get("Server", {})
                 server_url = server_info.get("url", "")
-                
+
                 # 如果有服务器地址且是以 / 调用的
                 if server_url and thumb.startswith("/"):
                     server_url = server_url.rstrip("/")
@@ -131,7 +136,7 @@ class PlexProcessor(BaseMediaProcessor):
             # 附加元数据
             result["metadata"] = self.extract_plex_metadata(metadata)
             result["plex_event"] = event
-            
+
             logger.debug(f"Plex 转换结果: {result}")
             return result
 

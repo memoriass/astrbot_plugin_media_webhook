@@ -3,17 +3,15 @@ BGM.tv 媒体数据提供者
 提供 BGM.tv (Bangumi.tv) 的数据丰富和图片获取功能
 """
 
-import asyncio
-from typing import Optional, Dict, Any
-from astrbot.api import logger
+from typing import Any
 
-from .base_provider import MediaEnrichmentProvider, MediaImageProvider, BaseProvider
+from .base_provider import BaseProvider, MediaEnrichmentProvider, MediaImageProvider
 
 
 class BGMProvider(MediaEnrichmentProvider, MediaImageProvider, BaseProvider):
     """BGM.tv 数据和图片提供者"""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         BaseProvider.__init__(self, request_interval=0.5)
         self.config = config
         self.base_url = "https://api.bgm.tv"
@@ -33,21 +31,24 @@ class BGMProvider(MediaEnrichmentProvider, MediaImageProvider, BaseProvider):
             return media_data
 
         name = media_data.get("series_name") or media_data.get("item_name")
-        if not name: return media_data
+        if not name:
+            return media_data
 
         # 1. 搜索作品
         subject = await self._search_subject(name)
         if subject:
-            media_data.update({
-                "bgm_id": subject.get("id"),
-                "bgm_enriched": True,
-                "overview": subject.get("summary") or media_data.get("overview"),
-            })
+            media_data.update(
+                {
+                    "bgm_id": subject.get("id"),
+                    "bgm_enriched": True,
+                    "overview": subject.get("summary") or media_data.get("overview"),
+                }
+            )
             # 如果没有图片，尝试获取 BGM 的图片
             if not media_data.get("image_url"):
                 images = subject.get("images", {})
                 media_data["image_url"] = images.get("large") or images.get("common")
-        
+
         return media_data
 
     async def get_media_image(self, media_data: dict) -> str:
@@ -59,19 +60,21 @@ class BGMProvider(MediaEnrichmentProvider, MediaImageProvider, BaseProvider):
             return media_data["image_url"]
 
         name = media_data.get("series_name") or media_data.get("item_name")
-        if not name: return ""
+        if not name:
+            return ""
 
         subject = await self._search_subject(name)
         if subject:
             images = subject.get("images", {})
             return images.get("large") or images.get("common") or ""
-        
+
         return ""
 
-    async def _search_subject(self, name: str) -> Optional[dict]:
+    async def _search_subject(self, name: str) -> dict | None:
         cache_key = f"bgm_search_{name}"
         cached = self._get_from_cache(cache_key)
-        if cached: return cached
+        if cached:
+            return cached
 
         # BGM V0 Search API (推荐使用)
         url = f"{self.base_url}/search/subject/{name}"

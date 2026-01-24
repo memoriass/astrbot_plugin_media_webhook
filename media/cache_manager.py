@@ -1,18 +1,18 @@
-
-import sqlite3
 import json
-import time
 import os
-from typing import Optional, Any
+import sqlite3
+import time
+
 from astrbot.api import logger
+
 
 class CacheManager:
     """基于 SQLite 的持久化缓存管理器"""
-    
+
     def __init__(self, db_dir: str, persistence_days: int = 7):
         if not os.path.exists(db_dir):
             os.makedirs(db_dir)
-            
+
         self.db_path = os.path.join(db_dir, "metadata_cache.db")
         self.persistence_seconds = persistence_days * 24 * 3600
         self._init_db()
@@ -20,23 +20,23 @@ class CacheManager:
     def _init_db(self):
         """初始化数据库表"""
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute('''
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS media_cache (
                     cache_key TEXT PRIMARY KEY,
                     data TEXT,
                     expiry INTEGER
                 )
-            ''')
-            conn.execute('CREATE INDEX IF NOT EXISTS idx_expiry ON media_cache(expiry)')
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_expiry ON media_cache(expiry)")
             conn.commit()
 
-    def get(self, key: str) -> Optional[dict]:
+    def get(self, key: str) -> dict | None:
         """获取缓存"""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.execute(
-                    "SELECT data FROM media_cache WHERE cache_key = ? AND expiry > ?", 
-                    (key, int(time.time()))
+                    "SELECT data FROM media_cache WHERE cache_key = ? AND expiry > ?",
+                    (key, int(time.time())),
                 )
                 row = cursor.fetchone()
                 if row:
@@ -53,7 +53,7 @@ class CacheManager:
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute(
                     "INSERT OR REPLACE INTO media_cache (cache_key, data, expiry) VALUES (?, ?, ?)",
-                    (key, data_json, expiry)
+                    (key, data_json, expiry),
                 )
                 conn.commit()
         except Exception as e:
@@ -63,7 +63,9 @@ class CacheManager:
         """清理过期缓存"""
         try:
             with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.execute("DELETE FROM media_cache WHERE expiry < ?", (int(time.time()),))
+                cursor = conn.execute(
+                    "DELETE FROM media_cache WHERE expiry < ?", (int(time.time()),)
+                )
                 if cursor.rowcount > 0:
                     logger.info(f"已清理 {cursor.rowcount} 条过期的持久化缓存数据")
                 conn.commit()

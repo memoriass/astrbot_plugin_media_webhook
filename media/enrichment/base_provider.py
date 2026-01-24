@@ -6,7 +6,8 @@
 import asyncio
 import time
 from abc import ABC, abstractmethod
-from typing import Dict, Optional, Any
+from typing import Any
+
 import aiohttp
 
 from astrbot.api import logger
@@ -85,19 +86,24 @@ class MediaImageProvider(ABC):
 
 class BaseProvider:
     """提供通用的 HTTP 请求及缓存逻辑"""
+
     def __init__(self, cache_ttl: int = 3600, request_interval: float = 0.5):
-        self.cache: Dict[str, Any] = {}
-        self.cache_timestamps: Dict[str, float] = {}
+        self.cache: dict[str, Any] = {}
+        self.cache_timestamps: dict[str, float] = {}
         self.cache_ttl = cache_ttl
         self.last_request_time = 0
         self.request_interval = request_interval
 
-    async def _http_get(self, url: str, params: Optional[Dict] = None, headers: Optional[Dict] = None) -> Optional[Dict]:
+    async def _http_get(
+        self, url: str, params: dict | None = None, headers: dict | None = None
+    ) -> dict | None:
         """封装 aiohttp GET 请求，带频率限制"""
         await self._rate_limit()
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params, headers=headers, timeout=10) as response:
+                async with session.get(
+                    url, params=params, headers=headers, timeout=10
+                ) as response:
                     if response.status == 200:
                         return await response.json()
                     elif response.status == 404:
@@ -109,7 +115,7 @@ class BaseProvider:
             logger.error(f"HTTP 请求异常 ({url}): {e}")
             return None
 
-    def _get_from_cache(self, key: str) -> Optional[Any]:
+    def _get_from_cache(self, key: str) -> Any | None:
         if key in self.cache_timestamps:
             if time.time() - self.cache_timestamps[key] < self.cache_ttl:
                 return self.cache.get(key)

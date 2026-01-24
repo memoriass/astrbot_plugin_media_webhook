@@ -6,7 +6,6 @@
 import hashlib
 import json
 import time
-from typing import Dict, Optional
 
 from astrbot.api import logger
 
@@ -19,7 +18,7 @@ class MediaDataProcessor:
     def __init__(self, media_handler: MediaHandler, cache_ttl_seconds: int = 300):
         self.media_handler = media_handler
         self.cache_ttl_seconds = cache_ttl_seconds
-        self.request_cache: Dict[str, float] = {}
+        self.request_cache: dict[str, float] = {}
 
     def is_duplicate_request(self, media_data: dict) -> bool:
         """检查是否为重复请求 - 使用哈希校验，排除图片以保持更高准确率"""
@@ -79,21 +78,27 @@ class MediaDataProcessor:
         if expired_keys:
             logger.debug(f"清理了 {len(expired_keys)} 个过期缓存条目")
 
-    async def detect_and_process_raw_data(self, raw_msg: dict) -> Optional[dict]:
+    async def detect_and_process_raw_data(self, raw_msg: dict) -> dict | None:
         """检测和处理原始数据"""
         try:
             body_text = raw_msg.get("raw_data", "")
             headers = raw_msg.get("headers", {})
 
             # 处理 Plex 的 multipart/form-data 特殊情况
-            if "multipart/form-data" in headers.get("Content-Type", "").lower() or "plex" in headers.get("User-Agent", "").lower():
+            if (
+                "multipart/form-data" in headers.get("Content-Type", "").lower()
+                or "plex" in headers.get("User-Agent", "").lower()
+            ):
                 # Plex 默认将 JSON 放在 form-data 的 'payload' 字段中
                 # 简单检测方法：如果 body_text 看起来像 multipart (包含 boundary)
-                if "name=\"payload\"" in body_text:
+                if 'name="payload"' in body_text:
                     try:
                         # 尝试正则匹配提取 payload 部分
                         import re
-                        match = re.search(r'name="payload"\r\n\r\n(\{.*?\})\r\n', body_text, re.DOTALL)
+
+                        match = re.search(
+                            r'name="payload"\r\n\r\n(\{.*?\})\r\n', body_text, re.DOTALL
+                        )
                         if match:
                             body_text = match.group(1)
                             logger.info("成功从 Plex Multipart 载荷中提取 JSON")

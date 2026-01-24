@@ -3,8 +3,6 @@ import json
 import time
 import uuid
 from pathlib import Path
-import aiohttp
-import requests
 
 from aiohttp import web
 from aiohttp.web import Request, Response
@@ -16,12 +14,11 @@ from astrbot.api.star import Context, Star
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .adapters import AdapterFactory
-from .media import MediaHandler, MediaDataProcessor
-from .game import GameHandler
 from .common import CommonHandler
-from .utils.html_renderer import HtmlRenderer
+from .game import GameHandler
+from .media import MediaDataProcessor, MediaHandler
 from .utils.browser import BrowserManager
-from concurrent.futures import ThreadPoolExecutor
+from .utils.html_renderer import HtmlRenderer
 
 # 常量定义
 DEFAULT_SENDER_ID = "2659908767"
@@ -38,7 +35,6 @@ class Main(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
-
 
         # 配置验证
         self._validate_config()
@@ -59,26 +55,34 @@ class Main(Star):
         self.webhook_token = config.get("webhook_token", "")
 
         # 路由配置
-        self.media_routes = self._parse_routes(config.get("media_routes", ["/media-webhook"]))
-        self.game_routes = self._parse_routes(config.get("game_routes", ["/game-webhook"]))
-        self.common_routes = self._parse_routes(config.get("common_routes", ["/webhook"]))
-        
+        self.media_routes = self._parse_routes(
+            config.get("media_routes", ["/media-webhook"])
+        )
+        self.game_routes = self._parse_routes(
+            config.get("game_routes", ["/game-webhook"])
+        )
+        self.common_routes = self._parse_routes(
+            config.get("common_routes", ["/webhook"])
+        )
+
         # 模板配置
         self.media_template = config.get("media_template", "css_news_card.html")
-        self.game_template = config.get("game_template", "placeholder.html")
-        self.common_template = config.get("common_template", "placeholder.html")
-        
+        self.game_template = config.get("game_template", "game_recipe_card.html")
+        self.common_template = config.get("common_template", "common_blog_card.html")
+
         # 初始化子模块
         # 获取标准数据路径
-        base_data_path = Path(get_astrbot_data_path()) / "plugin_data" / "astrbot_plugin_webhook_push"
+        base_data_path = (
+            Path(get_astrbot_data_path())
+            / "plugin_data"
+            / "astrbot_plugin_webhook_push"
+        )
         base_data_path.mkdir(parents=True, exist_ok=True)
-        
+
         enrichment_config = {
             "tmdb_api_key": config.get("tmdb_api_key", ""),
             "fanart_api_key": config.get("fanart_api_key", ""),
             "tvdb_api_key": config.get("tvdb_api_key", ""),
-            "bgm_app_id": config.get("bgm_app_id", ""),
-            "bgm_app_secret": config.get("bgm_app_secret", ""),
             "enable_translation": config.get("enable_translation", False),
             "preferred_translator": config.get("preferred_translator", "tencent"),
             "tencent_secret_id": config.get("tencent_secret_id", ""),
@@ -86,12 +90,14 @@ class Main(Star):
             "baidu_app_id": config.get("baidu_app_id", ""),
             "baidu_secret_key": config.get("baidu_secret_key", ""),
             "cache_persistence_days": config.get("cache_persistence_days", 7),
-            "data_path": base_data_path, # 传入数据路径
+            "data_path": base_data_path,  # 传入数据路径
         }
 
         try:
             self.media_handler = MediaHandler(enrichment_config)
-            self.data_processor = MediaDataProcessor(self.media_handler, self.cache_ttl_seconds)
+            self.data_processor = MediaDataProcessor(
+                self.media_handler, self.cache_ttl_seconds
+            )
             self.game_handler = GameHandler(self.context, config)
             self.common_handler = CommonHandler(config)
             self.image_renderer = HtmlRenderer()
@@ -124,11 +130,13 @@ class Main(Star):
             if saved_queue:
                 self.message_queue.extend(saved_queue)
                 logger.info(f"已恢复 {len(saved_queue)} 条未处理消息")
-            
+
             logger.info("准备进行浏览器环境自检...")
             await BrowserManager.init()
             await self.start_webhook_server()
-            self.batch_processor_task = asyncio.create_task(self.start_batch_processor())
+            self.batch_processor_task = asyncio.create_task(
+                self.start_batch_processor()
+            )
             logger.info("[OK] 插件初始化完成 - 所有模块已启用")
         except Exception as e:
             logger.error(f"插件初始化失败: {e}", exc_info=True)
@@ -151,13 +159,15 @@ class Main(Star):
         port = self.config.get("webhook_port", DEFAULT_WEBHOOK_PORT)
         if not isinstance(port, int) or port < 1 or port > 65535:
             errors.append(f"webhook_port 必须是 1-65535 之间的整数，当前值: {port}")
-        
+
         batch_size = self.config.get("batch_min_size", DEFAULT_BATCH_MIN_SIZE)
         if not isinstance(batch_size, int) or batch_size < 1:
             errors.append(f"batch_min_size 必须是大于 0 的整数，当前值: {batch_size}")
 
         if errors:
-            error_msg = "配置验证失败:\n" + "\n".join(f"  - {error}" for error in errors)
+            error_msg = "配置验证失败:\n" + "\n".join(
+                f"  - {error}" for error in errors
+            )
             logger.error(error_msg)
             raise ValueError(error_msg)
 
@@ -165,22 +175,28 @@ class Main(Star):
         """启动 Webhook 服务器"""
         try:
             self.app = web.Application()
-            
+
             # 注册媒体相关路由
             for route in self.media_routes:
-                self.app.router.add_post(self._normalize_route(route), self.handle_media_webhook)
+                self.app.router.add_post(
+                    self._normalize_route(route), self.handle_media_webhook
+                )
                 logger.info(f"注册媒体Webhook路由: POST {route}")
-            
+
             # 注册游戏相关路由
             for route in self.game_routes:
-                self.app.router.add_post(self._normalize_route(route), self.handle_game_webhook)
+                self.app.router.add_post(
+                    self._normalize_route(route), self.handle_game_webhook
+                )
                 logger.info(f"注册游戏Webhook路由: POST {route}")
 
             # 注册通用路由
             for route in self.common_routes:
-                self.app.router.add_post(self._normalize_route(route), self.handle_common_webhook)
+                self.app.router.add_post(
+                    self._normalize_route(route), self.handle_common_webhook
+                )
                 logger.info(f"注册通用Webhook路由: POST {route}")
-            
+
             self.app.router.add_get("/status", self.handle_status)
 
             self.runner = web.AppRunner(self.app)
@@ -227,7 +243,7 @@ class Main(Star):
             body_text = await request.text()
             headers = dict(request.headers)
             logger.info(f"[{trace_id}][媒体Webhook] 收到 Webhook 请求: {request.path}")
-            
+
             # 加入队列，标记为需要媒体检测
             raw_payload = {
                 "raw_data": body_text,
@@ -235,7 +251,7 @@ class Main(Star):
                 "timestamp": time.time(),
                 "message_type": "raw_media",
                 "trace_id": trace_id,
-                "template": self.media_template
+                "template": self.media_template,
             }
             await self._enqueue(raw_payload)
             return Response(text=f"已加入队列 (ID: {trace_id})", status=200)
@@ -253,10 +269,10 @@ class Main(Star):
             body_text = await request.text()
             headers = dict(request.headers)
             logger.info(f"[{trace_id}][游戏Webhook] 收到 Webhook 请求: {request.path}")
-            
+
             payload = json.loads(body_text)
             result = await self.game_handler.process_game_webhook(payload, headers)
-            
+
             if result and "message_text" in result:
                 result["message_type"] = "game"
                 result["timestamp"] = time.time()
@@ -280,16 +296,18 @@ class Main(Star):
             body_text = await request.text()
             headers = dict(request.headers)
             logger.info(f"[{trace_id}][通用Webhook] 收到 Webhook 请求: {request.path}")
-            
-            result = await self.common_handler.process_common_webhook(body_text, headers)
-            
+
+            result = await self.common_handler.process_common_webhook(
+                body_text, headers
+            )
+
             if result and "message_text" in result:
                 result["timestamp"] = time.time()
                 result["trace_id"] = trace_id
                 result["template"] = self.common_template
                 await self._enqueue(result)
                 return Response(text=f"已加入队列 (ID: {trace_id})", status=200)
-            
+
             return Response(text="无效数据", status=400)
         except Exception as e:
             logger.error(f"[{trace_id}] Webhook 处理出错: {e}")
@@ -303,7 +321,11 @@ class Main(Star):
             "queue_messages": len(self.message_queue),
             "target_group": self.group_id or "not_configured",
         }
-        return Response(text=json.dumps(status_info, indent=2), status=200, content_type="application/json")
+        return Response(
+            text=json.dumps(status_info, indent=2),
+            status=200,
+            content_type="application/json",
+        )
 
     # --- 消息分发与队列处理 (只负责最终发送) ---
 
@@ -315,7 +337,7 @@ class Main(Star):
         messages_to_process = self.message_queue.copy()
         self.message_queue.clear()
         await self._save_queue()
-        
+
         final_messages = []
         for msg in messages_to_process:
             trace_id = msg.get("trace_id", "Unknown")
@@ -335,7 +357,7 @@ class Main(Star):
         if final_messages:
             logger.info(f"开始批量处理 {len(final_messages)} 条消息")
             await self.send_intelligently(final_messages)
-        
+
         self.last_batch_time = time.time()
 
     async def send_intelligently(self, messages: list):
@@ -357,21 +379,27 @@ class Main(Star):
                 img = await self.image_renderer.render(
                     msg["message_text"],
                     msg.get("poster_url") or msg.get("image_url"),
-                    template_name=msg.get("template", "card_default.html")
+                    template_name=msg.get("template", "card_default.html"),
                 )
 
                 if img:
-                    rendered_messages.append({
-                        "message_text": "[图片通知]",
-                        "rendered_image": img,
-                        "sender_name": self.sender_name
-                    })
-            
-            if not rendered_messages: return
+                    rendered_messages.append(
+                        {
+                            "message_text": "[图片通知]",
+                            "rendered_image": img,
+                            "sender_name": self.sender_name,
+                        }
+                    )
 
-            platform = self.context.get_platform_inst(self.get_effective_platform_name())
+            if not rendered_messages:
+                return
+
+            platform = self.context.get_platform_inst(
+                self.get_effective_platform_name()
+            )
             bot = platform.get_client() if platform else None
-            if not bot: return
+            if not bot:
+                return
 
             adapter = AdapterFactory.create_adapter(self.get_effective_platform_name())
             await adapter.send_forward_messages(
@@ -398,7 +426,7 @@ class Main(Star):
                 img = await self.image_renderer.render(
                     msg["message_text"],
                     msg.get("poster_url") or msg.get("image_url"),
-                    template_name=msg.get("template", "card_default.html")
+                    template_name=msg.get("template", "card_default.html"),
                 )
                 if img:
                     chain = MessageChain([Comp.Image.fromBytes(img)])
@@ -416,16 +444,22 @@ class Main(Star):
 
     async def terminate(self):
         """卸载清理"""
-        if self.batch_processor_task: self.batch_processor_task.cancel()
-        if self.site: await self.site.stop()
-        if self.runner: await self.runner.cleanup()
+        if self.batch_processor_task:
+            self.batch_processor_task.cancel()
+        if self.site:
+            await self.site.stop()
+        if self.runner:
+            await self.runner.cleanup()
         await BrowserManager.close()
 
     def get_effective_platform_name(self) -> str:
         if self.platform_name == "auto":
             # 简化版自动检测逻辑
-            available = [p.meta().id for p in self.context.platform_manager.platform_insts]
+            available = [
+                p.meta().id for p in self.context.platform_manager.platform_insts
+            ]
             for p in ["llonebot", "napcat", "aiocqhttp"]:
-                if any(p in name.lower() for name in available): return p
+                if any(p in name.lower() for name in available):
+                    return p
             return available[0] if available else "llonebot"
         return self.platform_name
