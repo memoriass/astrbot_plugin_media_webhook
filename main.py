@@ -383,10 +383,12 @@ class Main(Star):
                 )
 
                 if img:
+                    # 将图片转换为 base64:// 协议字符串，适配 OneBot 协议
+                    base64_str = f"base64://{base64.b64encode(img).decode()}"
                     rendered_messages.append(
                         {
                             "message_text": "[图片通知]",
-                            "rendered_image": img,
+                            "image_url": base64_str,  # 适配器期望的字段名是 image_url
                             "sender_name": self.sender_name,
                         }
                     )
