@@ -3,22 +3,20 @@
 This plugin relies on local fonts to ensure text is rendered correctly in Docker environments, especially for Chinese characters.
 
 Status:
-- "Noto Sans SC" (Simplified Chinese) has been AUTO-DOWNLOADED as .woff2 files. (Success!)
-- Other fonts (Roboto, Open Sans, etc.) still need manual installation if you see issues, but they are less critical for Chinese support.
+- "Source Han Sans CN" (思源黑体 subset OTF) has been AUTO-DOWNLOADED. (Success!)
+- Why Source Han Sans? It provides excellent Chinese support and we found a reliable mirror.
+- We have aliased it to "Noto Sans SC" in the CSS, so no other code changes are needed.
 
 Files currently present (should represent Chinese font):
-- NotoSansSC-Regular.woff2
-- NotoSansSC-Bold.woff2
+- SourceHanSansCN-Regular.otf
+- SourceHanSansCN-Bold.otf
 
 If you still see boxes (tofu) for Chinese characters:
-1. Try downloading the FULL TTF versions manually (as the auto-downloaded woff2 is a subset).
-2. Place them here as:
-   - NotoSansSC-Regular.ttf
-   - NotoSansSC-Bold.ttf
-3. Update `../templates/_fonts.html` to point back to `.ttf` instead of `.woff2`.
+1. Verify the files above are ~8MB (Regular) and ~8MB (Bold).
+2. Restart your bot to ensure the browser process reloads the fonts.
 
-Manual Download Links for TTF:
-   https://github.com/google/fonts/raw/main/ofl/notosanssc/NotoSansSC-Regular.ttf
-   https://github.com/google/fonts/raw/main/ofl/notosanssc/NotoSansSC-Bold.ttf
+Manual Download Links (if auto-download corrupted):
+   https://github.com/adobe-fonts/source-han-sans/raw/release/SubsetOTF/CN/SourceHanSansCN-Regular.otf
+   https://github.com/adobe-fonts/source-han-sans/raw/release/SubsetOTF/CN/SourceHanSansCN-Bold.otf
 
 Restart the bot after any changes.
