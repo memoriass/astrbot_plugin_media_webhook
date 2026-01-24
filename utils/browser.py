@@ -94,8 +94,8 @@ async def render_template(
 
     async with PageContext(viewport=viewport, device_scale_factor=2) as page:
         logger.debug("开始渲染页面内容...")
-        # 使用 networkidle 确保所有图片资源已加载
-        await page.set_content(html_content, wait_until="networkidle", timeout=10000)
+        # 使用 load 确保基本资源已加载，避免 Docker 环境下 networkidle 超时
+        await page.set_content(html_content, wait_until="load", timeout=60000)
         try:
             # 额外等待一小段时间以防万一
             await page.wait_for_timeout(1000)

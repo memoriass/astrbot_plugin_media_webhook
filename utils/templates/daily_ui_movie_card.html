@@ -5,15 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Movie Card Style</title>
-    <link href="https://fonts.googleapis.com/css?family=Montserrat:400,700" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css?family=Open+Sans:400,300,600,700,800" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    {% include '_fonts.html' %}
     <style>
         /* Based on George Miro's Daily UI Movie Card */
-
-        @import url(https://fonts.googleapis.com/css?family=Montserrat:400,700);
-        @import url(https://fonts.googleapis.com/css?family=Open+Sans:400,300,600,700,800);
-        @import url(https://fonts.googleapis.com/icon?family=Material+Icons);
 
         * {
             box-sizing: border-box;
@@ -79,10 +73,12 @@
             z-index: 100;
         }
 
-        .menu i {
-            font-size: 36px;
+        .menu svg {
+            width: 36px;
+            height: 36px;
             color: #fe4141;
             filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+            fill: currentColor;
         }
 
         h1 {
@@ -171,19 +167,24 @@
             transition: 0.2s;
         }
 
-        .watch-btn i {
-            font-size: 16px;
+        .watch-btn svg {
+            width: 16px;
+            height: 16px;
             margin-right: 8px;
+            fill: currentColor;
         }
 
         .action-icons {
             display: flex;
+            align-items: center;
         }
 
-        .action-icons i {
+        .action-icons svg {
             color: #fe4141;
-            font-size: 22px;
+            width: 22px;
+            height: 22px;
             margin-left: 15px;
+            fill: currentColor;
         }
     </style>
 </head>
@@ -191,7 +192,13 @@
 <body>
     <div class="container card">
         <div class="movie-header">
-            <div class="menu"><i class="material-icons">info_outline</i></div>
+            <!-- info_outline icon -->
+            <div class="menu">
+                <svg viewBox="0 0 24 24">
+                    <path
+                        d="M11 17h2v-6h-2v6zm1-15C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zM11 9h2V7h-2v2z" />
+                </svg>
+            </div>
             {% if poster_url %}
             <img src="{{ poster_url }}" class="poster-image" alt="Poster">
             {% endif %}
@@ -227,11 +234,23 @@
 
             <div class="action-row">
                 <div class="watch-btn">
-                    <i class="material-icons">play_arrow</i> WATCH TRAILER
+                    <!-- play_arrow icon -->
+                    <svg viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z" />
+                    </svg>
+                    WATCH TRAILER
                 </div>
                 <div class="action-icons">
-                    <i class="material-icons">favorite_border</i>
-                    <i class="material-icons">share</i>
+                    <!-- favorite_border icon -->
+                    <svg viewBox="0 0 24 24">
+                        <path
+                            d="M16.5 3c-1.74 0-3.41.81-4.5 2.09C10.91 3.81 9.24 3 7.5 3 4.42 3 2 5.42 2 8.5c0 3.78 4.05 7.75 9.54 12.78-.44.49 1.96 1.96 2.46 1.46C19.95 17.75 22 13.78 22 8.5 22 5.42 19.58 3 16.5 3zm-4.4 15.55l-.1.1-.1-.1C7.14 14.24 4 11.08 4 8.5 4 6.56 5.56 5 7.5 5c1.17 0 2.29.5 2.95 1.48L12 8.76l1.55-2.28c.66-.99 1.78-1.48 2.95-1.48 1.94 0 3.5 1.56 3.5 3.5 0 2.58-3.14 5.74-7.9 10.05z" />
+                    </svg>
+                    <!-- share icon -->
+                    <svg viewBox="0 0 24 24">
+                        <path
+                            d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91 1.61 0 2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08z" />
+                    </svg>
                 </div>
             </div>
         </div>
