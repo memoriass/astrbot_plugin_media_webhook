@@ -58,6 +58,7 @@ class EnrichmentManager:
         if tvdb_api_key:
             tvdb_provider = TVDBProvider(tvdb_api_key)
             self.enrichment_providers.append(tvdb_provider)
+            self.image_providers.append(tvdb_provider)
             logger.info("TVDB 提供者已启用")
 
         # BGM.tv 提供者 (同时支持丰富和图片)
@@ -67,9 +68,17 @@ class EnrichmentManager:
         self.image_providers.append(bgm_provider)
         logger.info("BGM.tv 提供者已启用")
 
-        # 按优先级排序
-        self.enrichment_providers.sort(key=lambda p: p.priority)
-        self.image_providers.sort(key=lambda p: p.priority)
+        # 手动设置优先级：TMDB(1) > BGM(3) > TVDB(2)
+        # 注意：用户要求次序为 TMDB -> BGM -> TVDB
+        # 因此我们需要调整 BGM 和 TVDB 的 priority 值
+        # 修改各 Provider 文件太麻烦，直接在这里重新排序列表即可
+        
+        # 排序 Image Providers: TMDB -> BGM -> TVDB
+        # 我们知道它们的名字，直接按名字重排更稳健
+        provider_order = {"TMDB": 0, "Bangumi": 1, "TVDB": 2}
+        
+        self.enrichment_providers.sort(key=lambda p: provider_order.get(p.name, 99))
+        self.image_providers.sort(key=lambda p: provider_order.get(p.name, 99))
 
         if not self.enrichment_providers:
             logger.warning("未配置任何媒体数据丰富提供者")
@@ -121,6 +130,7 @@ class EnrichmentManager:
                     "tmdb_enriched": enriched_data.get("tmdb_enriched"),
                     "bgm_enriched": enriched_data.get("bgm_enriched"),
                     "year": enriched_data.get("year"),
+                    "poster_path": enriched_data.get("poster_path"),
                 }
                 self.cache.set(cache_key, cache_data)
 

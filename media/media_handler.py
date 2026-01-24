@@ -61,7 +61,7 @@ class MediaHandler:
 
 
 
-            # 3. 获取图片逻辑：丰富器优先 > 自定义兜底
+            # 3. 获取图片逻辑：丰富器优先 > 自定义兜底 > 本地背景图兜底
             logger.info("尝试获取丰富器图片")
             # 总是尝试从丰富器获取图片 (Media Route Prioritize Enricher)
             enricher_image_url = await self.enrichment_manager.get_media_image(enriched_data)
@@ -73,7 +73,16 @@ class MediaHandler:
                 enriched_data["image_url"] = custom_image_url
                 logger.info(f"  丰富器未提供图片，回退使用自定义图片: {custom_image_url}")
             else:
-                logger.info("  无可用图片")
+                # 最后的兜底：全都失败则使用随机背景图填充海报位置 (CommonHandler/GameHandler那样的逻辑)
+                logger.info("  无可用图片，使用随机背景兜底")
+                # 这里我们借用 CommonHandler 的资源，或者如果有 dedicated 资源更好
+                # 为保持一致性，我们可以简单地留空让渲染器处理，但用户明确要求 "自定义背景填充海报位置"
+                # 因此我们需要在这里生成一个本地背景图 URL
+                bg_url = self._get_random_bg() 
+                if bg_url:
+                    enriched_data["image_url"] = bg_url
+                    enriched_data["image_source_type"] = "fallback_bg" # 标记一下
+
 
             media_data = enriched_data
             logger.info(f"  最终图片URL: {media_data.get('image_url', '无')}")
@@ -480,3 +489,41 @@ class MediaHandler:
             sections.append(f"名称: {series_name}{year_text}")
 
         return "\n".join(sections)
+
+    def _get_random_bg(self) -> str:
+        """获取随机背景图作为海报兜底"""
+        try:
+            import base64
+            import random
+            from pathlib import Path
+            
+            # 使用 media_bg 目录
+            # 这里的 self.enrichment_manager.cache.db_dir 是 '.../astrbot_plugin_webhook_push'
+            
+            base_dir = Path(self.enrichment_manager.cache.db_dir)
+            bg_dir = base_dir / "media_bg"
+            
+            if not bg_dir.exists():
+                return ""
+
+            matches = []
+            for file in bg_dir.iterdir():
+                if file.suffix.lower() in [".jpg", ".jpeg", ".png", ".webp"]:
+                   matches.append(file)
+            
+            if not matches:
+                return ""
+            
+            selected_file = random.choice(matches)
+            
+            with open(selected_file, "rb") as f:
+                img_data = f.read()
+                b64 = base64.b64encode(img_data).decode()
+                ext = selected_file.suffix.lower().replace(".", "")
+                if ext == "jpg":
+                    ext = "jpeg"
+                return f"data:image/{ext};base64,{b64}"
+                
+        except Exception as e:
+            logger.error(f"获取随机背景图失败: {e}")
+            return ""

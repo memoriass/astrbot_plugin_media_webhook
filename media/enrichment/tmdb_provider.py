@@ -101,6 +101,26 @@ class TMDBProvider(MediaEnrichmentProvider, MediaImageProvider, BaseProvider):
             if poster_path:
                 return f"https://image.tmdb.org/t/p/w500{poster_path}"
 
+            # 4. 兜底：如果有 TMDB ID 但没有 poster_path (可能是因为缓存数据不完整)，尝试重新获取
+            # 这可以自动修复因代码更新前遗留的无 poster_path 的缓存问题
+            tmdb_id = media_data.get("tmdb_tv_id") or media_data.get("tmdb_id")
+            if tmdb_id:
+                try:
+                    logger.info(f"TMDB ID {tmdb_id} 存在但无海报，尝试补全...")
+                    # 简单判断类型
+                    endpoint = "tv" if media_data.get("tmdb_tv_id") or item_type in ["Series", "Season", "Episode"] else "movie"
+                    # 复用既有的 ID 丰富逻辑，它会更新 media_data (包括 poster_path)
+                    if endpoint == "movie":
+                        await self._enrich_movie_by_id(media_data, tmdb_id)
+                    else:
+                        await self._enrich_tv_by_id(media_data, tmdb_id)
+                    
+                    # 再次检查 poster_path
+                    if media_data.get("poster_path"):
+                        return f"https://image.tmdb.org/t/p/w500{media_data['poster_path']}"
+                except Exception as e:
+                    logger.warning(f"补全 TMDB 海报失败: {e}")
+
             return ""
         except Exception as e:
             logger.error(f"TMDB 图片获取出错: {e}")

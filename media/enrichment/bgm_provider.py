@@ -55,9 +55,7 @@ class BGMProvider(MediaEnrichmentProvider, MediaImageProvider, BaseProvider):
         return await self.get_image(media_data)
 
     async def get_image(self, media_data: dict) -> str:
-        # 如果前面已经拿到了图片（比如来自 TMDB 或海报），优先保留
-        if media_data.get("image_url"):
-            return media_data["image_url"]
+
 
         name = media_data.get("series_name") or media_data.get("item_name")
         if not name:

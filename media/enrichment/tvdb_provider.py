@@ -8,10 +8,10 @@ from typing import Any
 
 from astrbot.api import logger
 
-from .base_provider import BaseProvider, MediaEnrichmentProvider
+from .base_provider import BaseProvider, MediaEnrichmentProvider, MediaImageProvider
 
 
-class TVDBProvider(MediaEnrichmentProvider, BaseProvider):
+class TVDBProvider(MediaEnrichmentProvider, MediaImageProvider, BaseProvider):
     """TVDB 媒体数据提供者"""
 
     def __init__(self, api_key: str = ""):
@@ -86,7 +86,24 @@ class TVDBProvider(MediaEnrichmentProvider, BaseProvider):
             return media_data
 
     async def get_media_image(self, media_data: dict) -> str:
-        return ""
+        return await self.get_image(media_data)
+
+    async def get_image(self, media_data: dict) -> str:
+        try:
+            series_name = media_data.get("series_name", "")
+            if not series_name:
+                return ""
+                
+            await self._authenticate()
+            if not self.jwt_token:
+                return ""
+
+            series_info = await self._search_series(series_name)
+            if series_info and series_info.get("image"):
+                return series_info.get("image")
+            return ""
+        except Exception:
+            return ""
 
     # --- 私有方法 ---
 
