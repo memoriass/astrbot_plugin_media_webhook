@@ -56,10 +56,12 @@ class BaseAdapter(ABC):
 
     def validate_message(self, message: dict[str, Any]) -> bool:
         """验证消息格式"""
-        # 至少需要有文本内容
+        # 允许有文本内容 或者 有图片内容
         message_text = str(message.get("message_text", "")).strip()
-        if not message_text:
-            self.logger.warning("消息缺少文本内容")
+        image_url = message.get("image_url", "") or message.get("poster_url", "")
+        
+        if not message_text and not image_url:
+            self.logger.warning("消息缺少内容(无文本且无图片)")
             return False
 
         return True
