@@ -98,8 +98,15 @@ class NapCatAdapter(BaseAdapter):
         content = []
 
         # 添加图片（如果有）
+        # 添加图片（如果有）
         if message.get("image_url"):
-            content.append({"type": "image", "data": {"file": message["image_url"]}})
+            # 添加 summary 参数触发 NapCat 的压缩逻辑，防止图片过大发送失败
+            content.append(
+                {
+                    "type": "image",
+                    "data": {"file": message["image_url"], "summary": "AstrBot_Compressed"},
+                }
+            )
 
         # 添加文本
         message_text = str(message.get("message_text", "")).strip()
