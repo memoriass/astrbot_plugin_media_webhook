@@ -95,7 +95,13 @@ class LLOneBotAdapter(BaseAdapter):
 
         # 添加图片（如果有）
         if message.get("image_url"):
-            content.append({"type": "image", "data": {"file": message["image_url"]}})
+            # 为 LLOneBot 也添加 summary 参数，以触发潜在的图片处理逻辑
+            content.append(
+                {
+                    "type": "image",
+                    "data": {"file": message["image_url"], "summary": "AstrBot_Compressed"},
+                }
+            )
 
         # 添加文本
         message_text = str(message.get("message_text", "")).strip()

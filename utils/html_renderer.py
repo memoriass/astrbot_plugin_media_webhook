@@ -39,7 +39,7 @@ class HtmlRenderer:
             "poster_url": image_url or "",
             "title": title,
             "items": items,
-            "resource_path": (Path(__file__).parent / "resources").as_uri(),
+            "resource_path": (Path(__file__).parent / "resources").resolve().as_uri(),
         }
 
         return await render_template(

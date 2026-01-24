@@ -32,7 +32,13 @@ class BrowserManager:
                 try:
                     logger.info("正在启动 Webhook 插件的 Chromium 浏览器...")
                     cls._browser = await cls._playwright.chromium.launch(
-                        headless=True, args=["--no-sandbox", "--disable-setuid-sandbox"]
+                        headless=True,
+                        args=[
+                            "--no-sandbox",
+                            "--disable-setuid-sandbox",
+                            "--disable-web-security",
+                            "--allow-file-access-from-files",
+                        ],
                     )
                     logger.info("Webhook 插件内嵌浏览器启动成功")
                 except Exception as e:
