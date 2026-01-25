@@ -473,6 +473,34 @@ class Main(Star):
         status_text = f"📊 Webhook 状态\n\n🌐 端口: {self.webhook_port}\n📋 待发: {len(self.message_queue)}\n🎯 目标: {self.group_id}"
         yield event.plain_result(status_text)
 
+    @filter.command("webhook clear_cache")
+    async def webhook_clear_cache(self, event: AstrMessageEvent):
+        """手动清除媒体数据缓存"""
+        try:
+            # 获取 MediaHandler 中的 EnrichmentManager 进行清理
+            if self.media_handler and self.media_handler.enrichment_manager:
+                manager = self.media_handler.enrichment_manager
+                # 显式清理所有，不仅仅是过期的
+                # 注意：CacheManager.cleanup() 默认只清除过期
+                # 这里我们可能需要一个新的方法来清除所有，或者我们只清除过期。
+                # 用户说"手动清除数据库内的缓存而不是等到自动过期"，这意味着强制清除"所有"或者"当前"的缓存
+                # 为了安全，我们先实现清除 CacheManager 所管理的过期缓存（但我们可以传入0天让它全清除？）
+                
+                # 更好的方式是直接清空表或做一次深度清理
+                # 由于 CacheManager 封装在内部，我们先尝试调用 cleanup
+                # 如果用户是想清理所有（包括未过期的），需要看 CacheManager 实现
+                
+                # 重新审视需求: "清除数据库内的缓存而不是等到自动过期"
+                # 这意味着"使所有缓存立即过期并删除"
+                
+                count = manager.cache.clear_all() # 假设我们去实现这个方法
+                yield event.plain_result(f"🗑️ 已清除 {count} 条媒体数据缓存")
+            else:
+                yield event.plain_result("❌ 媒体处理器未初始化")
+        except Exception as e:
+            logger.error(f"清除缓存失败: {e}")
+            yield event.plain_result(f"❌ 清除缓存失败: {e}")
+
     async def terminate(self):
         """卸载清理"""
         if self.batch_processor_task:

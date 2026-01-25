@@ -10,6 +10,7 @@ class CacheManager:
     """基于 SQLite 的持久化缓存管理器"""
 
     def __init__(self, db_dir: str, persistence_days: int = 7):
+        self.db_dir = db_dir
         if not os.path.exists(db_dir):
             os.makedirs(db_dir)
 
@@ -71,3 +72,16 @@ class CacheManager:
                 conn.commit()
         except Exception as e:
             logger.error(f"清理过期缓存失败: {e}")
+
+    def clear_all(self) -> int:
+        """清除所有缓存"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute("DELETE FROM media_cache")
+                count = cursor.rowcount
+                conn.commit()
+                logger.info(f"已手动清除 {count} 条所有媒体缓存数据")
+                return count
+        except Exception as e:
+            logger.error(f"手动清除缓存失败: {e}")
+            return 0
